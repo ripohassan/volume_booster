@@ -2,7 +2,7 @@ name: untitled
 description: "Volume Booster App - Flutter project."
 publish_to: 'none' # private package
 
-version: 1.0.8+9
+version: 1.0.9+10
 
 environment:
   sdk: ^3.9.2

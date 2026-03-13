@@ -562,6 +562,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
 
   // Define your IDs here
   static const String _kWeeklyId = 'v.booster.weekly'; // 'npdf_pro_weekly'
+  static const String _kMonthlyId = 'v.booster.monthly'; // 'npdf_pro_yearly'
   static const String _kYearlyId = 'v.booster.yearly'; // 'npdf_pro_yearly'
   late SharedPreferencesService _prefsService;
   @override
@@ -621,7 +622,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
     final bool available = await _inAppPurchase.isAvailable();
     if (!available) return;
 
-    const Set<String> kIds = {_kWeeklyId, _kYearlyId};
+    const Set<String> kIds = {_kWeeklyId,_kMonthlyId,_kYearlyId};
     final ProductDetailsResponse response = await _inAppPurchase.queryProductDetails(kIds);
 
     if (mounted) {
@@ -697,6 +698,12 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
         "price": "\$4.99",
         "period": "3 days trail then",
         "id": _kWeeklyId,
+        "tag": null
+      },{
+        "title": "Monthly",
+        "price": "\$24.99",
+        "period": "3 days trail then",
+        "id": _kMonthlyId,
         "tag": null
       },
       {
@@ -831,10 +838,10 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                           _buildPlanCard(0, plans[0]),
                           const SizedBox(height: 12),
                           // // Monthly
-                          // _buildPlanCard(1, plans[1]),
-                          // const SizedBox(height: 12),
-                          // Yearly
                           _buildPlanCard(1, plans[1]),
+                          const SizedBox(height: 12),
+                          // Yearly
+                          _buildPlanCard(2, plans[2]),
                         ],
                         const SizedBox(height: 20),
                         Container(
