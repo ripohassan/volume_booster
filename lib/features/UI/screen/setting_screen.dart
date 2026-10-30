@@ -1,9 +1,9 @@
 // filepath: c:\Users\user\StudioProjects\untitled\lib\features\UI\screen\setting_screen.dart
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
@@ -14,7 +14,7 @@ import 'package:untitled/features/UI/screen/utils/ThemeProvider.dart';
 import 'package:untitled/features/UI/screen/utils/app_themes.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/service/shared_preferance/Shared_Preferences.dart';
-import '../controller/rewarded_ad_manager.dart';
+import '../controller/AppLovinAds.dart';
 import 'home_screen.dart';
 
 class SettingScreen extends StatefulWidget {
@@ -26,29 +26,53 @@ class SettingScreen extends StatefulWidget {
 
 class _SettingScreenState extends State<SettingScreen> {
   late SharedPreferencesService _prefsService;
-  final RewardedAdManager _rewardedAdManager = RewardedAdManager();
+  final AppLovinAds _appLovinAds = AppLovinAds();
   bool _isPremiumUser = false;
   bool _isLoading = true;
   String _premiumStatus = 'Free User';
   String _buildNumber = "Loading...";
   /// The In App Purchase plugin
   final InAppPurchase _inAppPurchase = InAppPurchase.instance;
+  StreamSubscription<List<PurchaseDetails>>? _subscription;
+  bool _isRestoring = false;
   List<ProductDetails> _products = [];
-  // NOTE: You must also set up a StreamSubscription to listen to
-  // InAppPurchase.instance.purchaseStream to handle purchase results.
 
   @override
   void initState() {
     super.initState();
+    _listenForPurchaseUpdated();
     _initializeServices();
     _initializeInAppPurchase();
     _initPackageInfo();
   }
 
+  void _listenForPurchaseUpdated() {
+    _subscription = _inAppPurchase.purchaseStream.listen((List<PurchaseDetails> purchaseDetailsList) {
+      for (var pd in purchaseDetailsList) {
+        _handlePurchaseDetails(pd);
+      }
+    }, onError: (error) {
+      debugPrint("❌ Purchase stream error: $error");
+    });
+  }
+
+  Future<void> _handlePurchaseDetails(PurchaseDetails pd) async {
+    if (pd.status == PurchaseStatus.purchased || pd.status == PurchaseStatus.restored) {
+      _prefsService = await SharedPreferencesService.getInstance();
+      await _prefsService.setPermanentPremium(true);
+      await _checkPremiumStatus();
+      if (pd.pendingCompletePurchase) {
+        await _inAppPurchase.completePurchase(pd);
+      }
+    } else if (pd.status == PurchaseStatus.error) {
+      debugPrint("❌ Purchase Error: ${pd.error?.message}");
+    }
+  }
+
   Future<void> _initializeInAppPurchase() async {
     final ProductDetailsResponse response =
     await _inAppPurchase.queryProductDetails(
-        <String>{ 'v.booster.weekly', 'v.booster.yearly'});
+        <String>{ 'v.booster.weekly', 'v.booster.monthly','v.booster.yearly'});
     if (response.productDetails.isNotEmpty) {
       setState(() {
         _products = response.productDetails;
@@ -61,11 +85,6 @@ class _SettingScreenState extends State<SettingScreen> {
   Future<void> _initializeServices() async {
     _prefsService = await SharedPreferencesService.getInstance();
     await _checkPremiumStatus();
-
-    // Load rewarded ad for non-premium users
-    if (!_isPremiumUser) {
-      _rewardedAdManager.loadRewardedAd();
-    }
   }
 
   Future<void> _checkPremiumStatus() async {
@@ -102,7 +121,7 @@ class _SettingScreenState extends State<SettingScreen> {
 
   @override
   void dispose() {
-    _rewardedAdManager.dispose();
+    _subscription?.cancel();
     super.dispose();
   }
 
@@ -111,12 +130,20 @@ class _SettingScreenState extends State<SettingScreen> {
 
     final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF1A1A2E),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF16213E),
-        elevation: 0,
-        leading: IconButton(
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFF0D0D1A), Color(0xFF1A1A2E), Color(0xFF0D0D1A)],
+        ),
+      ),
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          leading: IconButton(
           icon: Icon(Icons.arrow_back, color: Colors.white, size: 24.sp),
           onPressed: () => Navigator.pop(context),
         ),
@@ -133,7 +160,7 @@ class _SettingScreenState extends State<SettingScreen> {
       body: _isLoading
           ? Center(
         child: CircularProgressIndicator(
-          color: Colors.cyan,
+          color: const Color(0xFF00D4FF),
         ),
       )
           : SingleChildScrollView(
@@ -163,6 +190,17 @@ class _SettingScreenState extends State<SettingScreen> {
           //   tooltip: 'Change Theme',
           //   onPressed: () => _showThemeBottomSheet(context),
           // ),
+              // Watch Ad for Temporary Premium
+              if (!_isPremiumUser)
+                _buildSettingTile(
+                  icon: Icons.play_circle_outline,
+                  title: 'Watch Ad for Free Premium',
+                  subtitle: 'Earn 1 hour of ad-free PRO access',
+                  iconColor: const Color(0xFF00D4FF),
+                  onTap: _watchAdForPremium,
+                  trailing: Icon(Icons.arrow_forward_ios, color: Colors.grey, size: 16.sp),
+                ),
+
               // Restore Purchase
               _buildSettingTile(
                 icon: Icons.restore,
@@ -256,7 +294,7 @@ class _SettingScreenState extends State<SettingScreen> {
                 icon: Icons.email,
                 title: 'Contact Us',
                 subtitle: 'Send us your feedback',
-                iconColor: Colors.cyan,
+                iconColor: const Color(0xFF00D4FF),
                 onTap: _contactUs,
                 trailing: Icon(Icons.open_in_new, color: Colors.grey, size: 16.sp),
               ),
@@ -286,7 +324,7 @@ class _SettingScreenState extends State<SettingScreen> {
                     ),
                     SizedBox(height: 4.h),
                     Text(
-                      '© 2025 Volume Booster',
+                      '© 2026 Volume Booster',
                       style: TextStyle(
                         color: Colors.grey[700],
                         fontSize: 10.sp,
@@ -300,7 +338,9 @@ class _SettingScreenState extends State<SettingScreen> {
           ),
         ),
       ),
-    );
+      bottomNavigationBar: _appLovinAds.buildBannerAd(isPremium: _isPremiumUser),
+    ),
+  );
   }
 
   Widget _buildPremiumStatusCard() {
@@ -311,12 +351,12 @@ class _SettingScreenState extends State<SettingScreen> {
         decoration: BoxDecoration(
           gradient: _isPremiumUser
               ? const LinearGradient(
-            colors: [Color(0xFFFFD700), Color(0xFFFF8C00)],
+            colors: [Color(0xFF00D4FF), Color(0xFF005F73)],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           )
               : LinearGradient(
-            colors: [Colors.grey[800]!, Colors.grey[900]!],
+            colors: [Colors.grey[900]!, Colors.black],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
@@ -324,7 +364,7 @@ class _SettingScreenState extends State<SettingScreen> {
           boxShadow: [
             BoxShadow(
               color: _isPremiumUser
-                  ? Colors.orange.withOpacity(0.3)
+                  ? const Color(0xFF00D4FF).withOpacity(0.3)
                   : Colors.black.withOpacity(0.3),
               blurRadius: 10,
               offset: const Offset(0, 4),
@@ -394,39 +434,44 @@ class _SettingScreenState extends State<SettingScreen> {
     return Container(
       margin: EdgeInsets.only(bottom: 12.h),
       decoration: BoxDecoration(
-        color: const Color(0xFF16213E),
         borderRadius: BorderRadius.circular(12.r),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
       ),
-      child: ListTile(
-        onTap: onTap,
-        contentPadding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 10.h),
-        leading: SizedBox(
-          width: 40.w, // ensure square container
-          height: 40.w,
-          child: Center(
-            child: Icon(
-              icon,
-              color: iconColor,
-              size: 20.sp,
+      child: Material(
+        color: const Color(0xFF121212),
+        borderRadius: BorderRadius.circular(12.r),
+        clipBehavior: Clip.antiAlias,
+        child: ListTile(
+          onTap: onTap,
+          contentPadding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 10.h),
+          leading: SizedBox(
+            width: 40.w, // ensure square container
+            height: 40.w,
+            child: Center(
+              child: Icon(
+                icon,
+                color: iconColor,
+                size: 20.sp,
+              ),
             ),
           ),
-        ),
-        title: Text(
-          title,
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 14.sp,
-            fontWeight: FontWeight.w600,
+          title: Text(
+            title,
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 14.sp,
+              fontWeight: FontWeight.w600,
+            ),
           ),
-        ),
-        subtitle: Text(
-          subtitle,
-          style: TextStyle(
-            color: Colors.grey[400],
-            fontSize: 12.sp,
+          subtitle: Text(
+            subtitle,
+            style: TextStyle(
+              color: Colors.grey[400],
+              fontSize: 12.sp,
+            ),
           ),
+          trailing: trailing,
         ),
-        trailing: trailing,
       ),
     );
   }
@@ -602,104 +647,118 @@ class _SettingScreenState extends State<SettingScreen> {
   }
 
   Future<void> _watchAdForPremium() async {
-    if (!_rewardedAdManager.isAdReady) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Loading ad, please wait...'),
-          backgroundColor: Colors.orange,
-          duration: const Duration(seconds: 2),
-        ),
-      );
+    _appLovinAds.onRewardCallback = (amount) async {
+      print('🎁 User earned reward: $amount');
 
-      await _rewardedAdManager.loadRewardedAd(
-        onAdLoaded: () {
-          _watchAdForPremium();
-        },
-        onAdFailedToLoad: (error) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Failed to load ad: $error'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        },
-      );
-      return;
-    }
+      await _prefsService.setTemporaryPremium(const Duration(hours: 1));
+      await _checkPremiumStatus();
 
-    await _rewardedAdManager.showRewardedAd(
-      onUserEarnedReward: (amount, type) async {
-        print('🎁 User earned reward: $amount $type');
-
-        await _prefsService.setTemporaryPremium(const Duration(hours: 1));
-        await _checkPremiumStatus();
-
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('🎉 Premium unlocked for 1 hour! Enjoy ad-free experience.'),
+          const SnackBar(
+            content: Text('🎉 Premium unlocked for 1 hour! Enjoy ad-free experience.'),
             backgroundColor: Colors.green,
-            duration: const Duration(seconds: 3),
+            duration: Duration(seconds: 3),
           ),
         );
+      }
 
-        print('✅ Temporary premium granted for 1 hour');
-      },
-      onAdDismissed: () {
-        _rewardedAdManager.loadRewardedAd();
-      },
-    );
+      print('✅ Temporary premium granted for 1 hour');
+    };
+
+    final shown = await _appLovinAds.showRewardedAd();
+    if (!shown && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('⏳ Ad is loading. Please try again in a moment!'),
+          backgroundColor: Color(0xFF16213E),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
   }
 
   Future<void> _handleRestorePurchase() async {
-    // ⚠️ CRITICAL: restorePurchases() is non-blocking.
-    // The result comes via the purchaseStream, which should handle status updates.
+    if (_isRestoring) return;
+    setState(() { _isRestoring = true; });
 
-    // Show loading dialog
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => Center(
+      builder: (context) => const Center(
         child: CircularProgressIndicator(color: Colors.cyan),
       ),
     );
 
-    _inAppPurchase.restorePurchases();
+    try {
+      final bool available = await _inAppPurchase.isAvailable();
+      if (!available) {
+        if (mounted && Navigator.canPop(context)) Navigator.of(context).pop();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Store is not available right now. Please try again later.'),
+              backgroundColor: Colors.redAccent,
+            ),
+          );
+        }
+        return;
+      }
 
-    // TODO: REMOVE the synchronous check below after implementing the purchase stream listener
-    // This synchronous logic must be removed after implementing the proper stream listener.
-    await Future.delayed(const Duration(seconds: 2)); // Simulate waiting
-    Navigator.of(context).pop(); // Close loading dialog
+      await _inAppPurchase.restorePurchases();
+      await Future.delayed(const Duration(seconds: 3));
 
-    final hasPermanent = await _prefsService.isPermanentPremium();
+      if (mounted && Navigator.canPop(context)) {
+        Navigator.of(context).pop();
+      }
 
-    if (hasPermanent) {
-      await _checkPremiumStatus();
+      final hasPermanent = await _prefsService.isPermanentPremium();
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              Icon(Icons.check_circle, color: Colors.white, size: 20.sp),
-              SizedBox(width: 10.w),
-              const Expanded(child: Text('✅ Premium purchase restored successfully!')),
-            ],
+      if (hasPermanent) {
+        await _checkPremiumStatus();
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  Icon(Icons.check_circle, color: Colors.white, size: 20.sp),
+                  SizedBox(width: 10.w),
+                  const Expanded(child: Text('✅ Premium purchase restored successfully!')),
+                ],
+              ),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('ℹ️ No previous purchase found to restore.'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint("❌ Error restoring purchases: $e");
+      if (mounted && Navigator.canPop(context)) Navigator.of(context).pop();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error restoring purchases: $e'),
+            backgroundColor: Colors.redAccent,
           ),
-          backgroundColor: Colors.green,
-          duration: const Duration(seconds: 3),
-        ),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('ℹ️ No previous purchase found.'),
-          backgroundColor: Colors.orange,
-          duration: const Duration(seconds: 2),
-        ),
-      );
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() { _isRestoring = false; });
+      }
     }
-    // END TODO
-
-    print('🔄 Restore purchase completed (Simulated)');
   }
 
   Future<void> _handleRemoveSubscription() async {
@@ -917,9 +976,10 @@ class _SettingScreenState extends State<SettingScreen> {
       context: context,
       builder: (BuildContext context) {
         return Dialog(
-          backgroundColor: const Color(0xFF16213E),
+          backgroundColor: const Color(0xFF050505),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20.r),
+            side: BorderSide(color: Colors.white.withOpacity(0.1)),
           ),
           child: Padding(
             padding: EdgeInsets.all(24.w),
@@ -932,7 +992,7 @@ class _SettingScreenState extends State<SettingScreen> {
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     gradient: const LinearGradient(
-                      colors: [Colors.cyan, Colors.blue],
+                      colors: [Color(0xFF00D4FF), Color(0xFF005F73)],
                     ),
                   ),
                   child: Icon(
@@ -963,13 +1023,13 @@ class _SettingScreenState extends State<SettingScreen> {
                 SizedBox(height: 20.h),
 
                 Text(
-                  'Boost your audio volume up to 200%!\n\n'
+                  'Professional Audio Equalizer & Sound Enhancement\n\n'
                       'Features:\n'
-                      '• Volume Booster (up to 200%)\n'
-                      '• Equalizer Controls\n'
-                      '• Custom Ringtones\n'
-                      '• Audio File Support\n'
-                      '• Ad-Free Premium Option',
+                      '• 10-Band Graphic Equalizer\n'
+                      '• Bass Boost & Gain Optimization\n'
+                      '• Genre Presets (Rock, Pop, Jazz, etc.)\n'
+                      '• Local Audio Import & Export\n'
+                      '• Ad-Free Premium Experience',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: Colors.grey[300],
@@ -982,7 +1042,7 @@ class _SettingScreenState extends State<SettingScreen> {
                 ElevatedButton(
                   onPressed: () => Navigator.of(context).pop(),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.cyan,
+                    backgroundColor: const Color(0xFF00D4FF),
                     padding: EdgeInsets.symmetric(horizontal: 40.w, vertical: 12.h),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(25.r),
@@ -1038,7 +1098,7 @@ class _SettingScreenState extends State<SettingScreen> {
   Future<void> _shareApp() async {
     // TODO: Replace with your app's actual share URL
     await Share.share(
-      'Check out this awesome Volume Booster app! Download it here: [YOUR APP STORE LINK HERE]',
+      'Check out this awesome Volume Booster app! Download it here: ${AppConfigs.appShareios}',
       subject: 'Share Volume Booster App',
     );
   }
@@ -1053,13 +1113,13 @@ class _SettingScreenState extends State<SettingScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF16213E),
+        backgroundColor: const Color(0xFF050505),
         title: Text(title, style: TextStyle(color: Colors.white, fontSize: 18.sp)),
         content: Text(content, style: TextStyle(color: Colors.grey[300], fontSize: 14.sp)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: Text('OK', style: TextStyle(color: Colors.cyan, fontSize: 14.sp)),
+            child: Text('OK', style: TextStyle(color: const Color(0xFF00D4FF), fontSize: 14.sp)),
           ),
         ],
       ),

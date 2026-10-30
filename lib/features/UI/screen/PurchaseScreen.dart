@@ -1,9 +1,6 @@
 import 'dart:async';
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:get/get.dart';
-import 'package:get/get_core/src/get_main.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:untitled/features/UI/screen/home_screen.dart';
 
@@ -28,13 +25,18 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
 
   String _premiumStatus = 'Free User';
   // 0 = Weekly, 1 = Monthly, 2 = Yearly
-  int _selectedIndex = 1;
-  bool showSkip = false;
+  int _selectedIndex = 2;
+  bool showSkip = true;
 
-  // Define your IDs here
-  static const String _kWeeklyId = 'v.booster.weekly'; // 'npdf_pro_weekly'
-  static const String _kMonthlyId = 'v.booster.monthly'; // 'npdf_pro_yearly'
-  static const String _kYearlyId = 'v.booster.yearly'; // 'npdf_pro_yearly'
+  // In-app purchase product IDs
+  static const String _kWeeklyId = 'v.booster.weekly';
+  static const String _kMonthlyId = 'v.booster.monthly';
+  static const String _kYearlyId = 'v.booster.yearly';
+  
+  // Premium Colors
+  static const Color neonCyan = Color(0xFF00D4FF);
+  static const Color bgBlack = Color(0xFF050505);
+  
   late SharedPreferencesService _prefsService;
   @override
   void initState() {
@@ -42,14 +44,6 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
     _initializeInAppPurchase();
     _listenForPurchaseUpdated();
     _initializeServices();
-    // Show close button after delay
-    Future.delayed(const Duration(seconds: 3), () {
-      if (mounted) {
-        setState(() {
-          showSkip = true;
-        });
-      }
-    });
   }
 
 
@@ -121,37 +115,139 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
     }
   }
 
+  bool _isRestoring = false;
+
   void _listenForPurchaseUpdated() {
     _subscription = _inAppPurchase.purchaseStream.listen((List<PurchaseDetails> purchaseDetailsList) {
       for (var purchaseDetails in purchaseDetailsList) {
-        if (purchaseDetails.status == PurchaseStatus.purchased ||
-            purchaseDetails.status == PurchaseStatus.restored) {
-          _navigateToHome();
-          if (purchaseDetails.pendingCompletePurchase) {
-            _inAppPurchase.completePurchase(purchaseDetails);
-          }
-        }
+        _handlePurchaseDetails(purchaseDetails);
       }
     }, onError: (error) {
       debugPrint("Purchase Error: $error");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Purchase Error: $error"),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
     });
   }
 
-  Future<void> _navigateToHome() async {
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => const HomeScreen()),
-    );
-    await Future.delayed(const Duration(seconds: 2));
+  Future<void> _handlePurchaseDetails(PurchaseDetails purchaseDetails) async {
+    if (purchaseDetails.status == PurchaseStatus.purchased ||
+        purchaseDetails.status == PurchaseStatus.restored) {
+      _prefsService = await SharedPreferencesService.getInstance();
+      await _prefsService.setPermanentPremium(true);
 
-    await _prefsService.setPermanentPremium(true);
-    await _checkPremiumStatus();
+      if (purchaseDetails.pendingCompletePurchase) {
+        await _inAppPurchase.completePurchase(purchaseDetails);
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('🎉 Premium unlocked successfully!'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+        _dismissScreen();
+      }
+    } else if (purchaseDetails.status == PurchaseStatus.error) {
+      debugPrint("Purchase error: ${purchaseDetails.error?.message}");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(purchaseDetails.error?.message ?? "Purchase failed"),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    }
   }
-  Future<void> _navigateToHomeSkip() async {
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => const HomeScreen()),
-    );
+
+  Future<void> _restorePurchases() async {
+    if (_isRestoring) return;
+
+    setState(() {
+      _isRestoring = true;
+    });
+
+    _prefsService = await SharedPreferencesService.getInstance();
+
+    if (mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: CircularProgressIndicator(color: neonCyan),
+        ),
+      );
+    }
+
+    try {
+      final bool available = await _inAppPurchase.isAvailable();
+      if (!available) {
+        if (mounted && Navigator.canPop(context)) Navigator.of(context).pop();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Store is not available right now. Please try again later.'),
+              backgroundColor: Colors.redAccent,
+            ),
+          );
+        }
+        return;
+      }
+
+      await _inAppPurchase.restorePurchases();
+      await Future.delayed(const Duration(seconds: 3));
+
+      if (mounted && Navigator.canPop(context)) {
+        Navigator.of(context).pop();
+      }
+
+      final isPremium = await _prefsService.isPermanentPremium();
+      if (!isPremium && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No previous active purchases found to restore.'),
+            backgroundColor: Colors.orangeAccent,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint("❌ Error restoring purchases: $e");
+      if (mounted && Navigator.canPop(context)) Navigator.of(context).pop();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error restoring purchases: $e'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isRestoring = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _dismissScreen() async {
+    if (!mounted) return;
+    if (Navigator.canPop(context)) {
+      Navigator.pop(context);
+    } else {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const HomeScreen()),
+      );
+    }
   }
 
   @override
@@ -162,224 +258,141 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // UI Data for the 3 plans
     final List<Map<String, dynamic>> plans = [
       {
         "title": "Weekly",
-        "price": "\$4.99",
-        "period": "3 days trail then",
+        "price": "\$7.99",
+        "period": "3 days free trial, then",
         "id": _kWeeklyId,
         "tag": null
-      },{
+      },
+      {
         "title": "Monthly",
-        "price": "\$24.99",
-        "period": "3 days trail then",
+        "price": "\$29.99",
+        "period": "3 days free trial, then",
         "id": _kMonthlyId,
         "tag": null
       },
       {
         "title": "Yearly",
-        "price": "\$49.99",
-        "period": "3 days trail then",
+        "price": "\$99.99",
+        "period": "3 days free trial, then",
         "id": _kYearlyId,
-        "tag": "BEST VALUE" // Save % calc could go here
+        "tag": "BEST VALUE"
       },
     ];
 
+    // Plans configuration moved inside build to access local variables if needed, 
+    // but neonCyan and bgBlack are now class-level constants.
+
+    final theme = Theme.of(context);
+    final backgroundColor = theme.scaffoldBackgroundColor;
+
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: backgroundColor,
       body: Stack(
         children: [
-          // 1. Background Design (Subtle Gradient)
+          // 1. Subtle, Minimalist Background Gradient
           Positioned.fill(
             child: Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [Color(0xFF0F172A), Color(0xFF000000)],
+              decoration: BoxDecoration(
+                gradient: RadialGradient(
+                  center: const Alignment(0, -0.6),
+                  radius: 1.2,
+                  colors: [
+                    neonCyan.withOpacity(0.12),
+                    backgroundColor,
+                  ],
                 ),
               ),
             ),
           ),
 
-          // 2. Background Blobs for modern feel
-          Positioned(
-            top: -100,
-            right: -100,
-            child: Container(
-              width: 300,
-              height: 300,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.blue.withOpacity(0.2),
-                //borderRadius: BorderRadius.all(Radius.circular(2.0)),
-              ),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 60, sigmaY: 60),
-                child: Container(color: Colors.transparent),
-              ),
-            ),
-          ),
-
-          // 3. Main Content
+          // 2. Main Layout
           SafeArea(
             child: Column(
               children: [
-                // --- Header / Close Button ---
+                // Header (Close Option)
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10),
+                  padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 10.h),
                   child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      // Restore Button (Left)
-
-                        // InkWell(
-                        //   onTap: () => _inAppPurchase.restorePurchases(),
-                        //   child: const Text(
-                        //     "Restore",
-                        //     style: TextStyle(color: Colors.white54, fontSize: 14, fontWeight: FontWeight.w600),
-                        //   ),
-                        // ),
-                     // Spacer
-
-                      // Close Button (Right) - visible based on timer
-                      AnimatedOpacity(
-                        duration: const Duration(milliseconds: 500),
-                        opacity: showSkip ? 1.0 : 0.0,
-                        child: InkWell(
-                          onTap: showSkip ? _navigateToHomeSkip : null,
-                          child: Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.1),
-                                shape: BoxShape.circle
-                            ),
-                            child: const Icon(Icons.close, color: Colors.white, size: 20),
+                      GestureDetector(
+                        onTap: _dismissScreen,
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.12),
+                            shape: BoxShape.circle,
                           ),
+                          child: Icon(Icons.close_rounded, color: Colors.white, size: 22.sp),
                         ),
                       ),
                     ],
                   ),
                 ),
 
-                // --- Hero Section ---
                 Expanded(
                   child: SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    physics: const BouncingScrollPhysics(),
+                    padding: EdgeInsets.symmetric(horizontal: 24.w),
                     child: Column(
                       children: [
-                        const SizedBox(height: 10),
-                        // Icon
-                        Image.asset(
-                          "assets/images/Volumix-png.png",
-                          width: 150.4.w,
-                          height: 40.h,
+                        
+                        // Golden Crown Icon
+                        Icon(
+                          Icons.workspace_premium_rounded,
+                          color: neonCyan,
+                          size: 64.sp,
                         ),
-                        const SizedBox(height: 24),
+                        SizedBox(height: 8.h),
 
                         // Title
-                        const Text(
-                          "Upgrade to Volume Booster Pro",
+                        Text(
+                          "PRO ACCESS",
                           textAlign: TextAlign.center,
-                          style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                              letterSpacing: -0.5),
-                        ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          "Remove ads and unlock advanced editing tools.",
-                          textAlign: TextAlign.center,
-                          style: TextStyle(fontSize: 16, color: Colors.white60),
-                        ),
-
-                        const SizedBox(height: 30),
-
-                        // Features List
-                        _buildFeatureItem(Icons.edit_document, "Edit your audio volume directly"),
-                        //_buildFeatureItem(Icons.draw, "Sign Documents & Fill Forms"),
-                        //_buildFeatureItem(Icons.scanner, "Unlimited OCR Scanning"),
-                        _buildFeatureItem(Icons.block, "100% Ad-Free Experience"),
-
-                        const SizedBox(height: 20),
-
-                        // --- Subscription Cards ---
-                        ...[
-                          // Weekly
-                          _buildPlanCard(0, plans[0]),
-                          const SizedBox(height: 12),
-                          // // Monthly
-                          _buildPlanCard(1, plans[1]),
-                          const SizedBox(height: 12),
-                          // Yearly
-                          _buildPlanCard(2, plans[2]),
-                        ],
-                        const SizedBox(height: 20),
-                        Container(
-                          padding: const EdgeInsets.fromLTRB(24, 20, 24, 40),
-                          decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                  begin: Alignment.topCenter,
-                                  end: Alignment.bottomCenter,
-                                  colors: [Colors.black.withOpacity(0.0), Colors.black],
-                                  stops: const [0.0, 0.3]
-                              )
-                          ),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              // Main CTA
-                              SizedBox(
-                                width: double.infinity,
-                                height: 56,
-                                child: ElevatedButton(
-                                  onPressed: () {
-                                    print(plans[_selectedIndex]['id'].toString());
-                                    _buyProduct(plans[_selectedIndex]['id']);
-                                  },
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.blueAccent,
-                                    foregroundColor: Colors.white,
-                                    elevation: 10,
-                                    shadowColor: Colors.blueAccent.withOpacity(0.5),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                                  ),
-                                  child: Text(
-                                    'Start Subscription',
-                                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                                  ),
-                                ),
-                              ),
-
-                              const SizedBox(height: 16),
-                              InkWell(
-                                onTap: () => _inAppPurchase.restorePurchases(),
-                                child: const Text(
-                                  "Restore Purchase",
-                                  style: TextStyle(color: Colors.white54, fontSize: 14, fontWeight: FontWeight.w600),
-                                ),
-                              ),
-
-                              const SizedBox(height: 16),
-                              // Legal Links
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  _buildFooterLink("Terms of Use", () {
-                                    Navigator.push(context, MaterialPageRoute(builder: (_) => const TermsCondition()));
-                                  }),
-                                  Container(margin: const EdgeInsets.symmetric(horizontal: 12), width: 1, height: 12, color: Colors.white24),
-                                  _buildFooterLink("Privacy Policy", () {
-                                    Navigator.push(context, MaterialPageRoute(builder: (_) => const PrivacyAndSettingScreen()));
-                                  }),
-                                ],
-                              )
-                            ],
+                          style: TextStyle(
+                            fontSize: 22.sp,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                            letterSpacing: 4.0,
                           ),
                         ),
-                        const SizedBox(height: 10),
+                        SizedBox(height: 8.h),
+                        
+                        Text(
+                          "Experience the true power of your audio.",
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 14.sp, color: Colors.white54, letterSpacing: 0.5),
+                        ),
+                        
+                        SizedBox(height: 8.h),
 
-                       // const SizedBox(height: 100), // Space for bottom button
+                        // Consolidated, core minimalist features
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            _buildPremiumFeature(Icons.equalizer_rounded, "Pro Graphic\nEqualizer & FX"),
+                            SizedBox(width: 16.w),
+                            _buildPremiumFeature(Icons.bolt_rounded, "Advanced Gain\n& Bass Boost"),
+                            SizedBox(width: 16.w),
+                            _buildPremiumFeature(Icons.block_rounded, "100%\nAd-Free"),
+                          ],
+                        ),
+
+                        SizedBox(height: 24.h),
+
+                        // Plans
+                        ListView.separated(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: plans.length,
+                          separatorBuilder: (context, index) => SizedBox(height: 16.h),
+                          itemBuilder: (context, index) => _buildPlanCard(index, plans[index], neonCyan),
+                        ),
+                        
+                        SizedBox(height: 260.h), // Spacing for sticky bottom
                       ],
                     ),
                   ),
@@ -388,35 +401,114 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
             ),
           ),
 
-          // 4. Sticky Bottom Button
-
+          // 3. Sticky Bottom CTA
+          Positioned(
+            bottom: 0, left: 0, right: 0,
+            child: Container(
+              padding: EdgeInsets.fromLTRB(24.w, 80.h, 24.w, 30.h),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    backgroundColor.withOpacity(0.0),
+                    backgroundColor.withOpacity(0.95),
+                    backgroundColor,
+                  ],
+                  stops: const [0.0, 0.4, 1.0]
+                ),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Main CTA Button
+                  GestureDetector(
+                    onTap: () {
+                      _buyProduct(plans[_selectedIndex]['id']);
+                    },
+                    child: Container(
+                      width: double.infinity,
+                      height: 56.h,
+                      decoration: BoxDecoration(
+                        color: neonCyan,
+                        borderRadius: BorderRadius.circular(16.r),
+                        boxShadow: [
+                          BoxShadow(
+                            color: neonCyan.withOpacity(0.15),
+                            blurRadius: 20,
+                            spreadRadius: 2,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Center(
+                        child: Text(
+                          'CONTINUE',
+                          style: TextStyle(
+                            fontSize: 16.sp,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.black,
+                            letterSpacing: 2.0,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: 20.h),
+                  
+                  // Restore purchases
+                  GestureDetector(
+                    onTap: _isRestoring ? null : _restorePurchases,
+                    child: Text(
+                      "RESTORE PURCHASES",
+                      style: TextStyle(
+                        color: _isRestoring ? Colors.white24 : Colors.white54,
+                        fontSize: 11.sp,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 1.0,
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: 20.h),
+                  
+                  // Links
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      _buildFooterLink("Terms of Use", () {
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => const TermsCondition()));
+                      }),
+                      Container(margin: EdgeInsets.symmetric(horizontal: 12.w), width: 1, height: 10.h, color: Colors.white24),
+                      _buildFooterLink("Privacy Policy", () {
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => const PrivacyAndSettingScreen()));
+                      }),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildFeatureItem(IconData icon, String text) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16.0),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(icon, color: Colors.blueAccent, size: 20),
+  Widget _buildPremiumFeature(IconData icon, String text) {
+    return Column(
+      children: [
+        Icon(icon, color: Colors.white, size: 28.sp),
+        SizedBox(height: 12.h),
+        Text(
+          text,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: Colors.white70,
+            fontSize: 12.sp,
+            fontWeight: FontWeight.w500,
+            height: 1.4,
           ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Text(
-              text,
-              style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w500),
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -425,14 +517,13 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
       onTap: onTap,
       child: Text(
         text,
-        style: const TextStyle(color: Colors.white54, fontSize: 12),
+        style: TextStyle(color: Colors.white38, fontSize: 10.sp, fontWeight: FontWeight.w400, letterSpacing: 0.5),
       ),
     );
   }
 
-  Widget _buildPlanCard(int index, Map<String, dynamic> plan) {
+  Widget _buildPlanCard(int index, Map<String, dynamic> plan, Color goldAccent) {
     final isSelected = _selectedIndex == index;
-    final isBestValue = plan['tag'] == "BEST VALUE";
 
     return GestureDetector(
       onTap: () {
@@ -441,30 +532,33 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
         });
       },
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.all(16),
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+        padding: EdgeInsets.symmetric(vertical: 20.h, horizontal: 20.w),
         decoration: BoxDecoration(
-          color: isSelected ? Colors.blueAccent.withOpacity(0.15) : Colors.white.withOpacity(0.05),
+          color: isSelected ? neonCyan.withOpacity(0.04) : Colors.transparent,
           border: Border.all(
-            color: isSelected ? Colors.blueAccent : Colors.white.withOpacity(0.1),
-            width: isSelected ? 2 : 1,
+            color: isSelected ? neonCyan : Colors.white.withOpacity(0.1),
+            width: isSelected ? 1.5 : 1.0,
           ),
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(16.r),
         ),
         child: Row(
           children: [
             // Radio Indicator
-            Container(
-              width: 22,
-              height: 22,
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              width: 20.w,
+              height: 20.w,
               decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: isSelected ? Colors.blueAccent : Colors.transparent,
-                  border: Border.all(color: isSelected ? Colors.blueAccent : Colors.grey, width: 2)
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: isSelected ? neonCyan : Colors.white30,
+                  width: isSelected ? 6 : 1,
+                ),
               ),
-              child: isSelected ? const Icon(Icons.check, size: 14, color: Colors.white) : null,
             ),
-            const SizedBox(width: 16),
+            SizedBox(width: 16.w),
 
             // Text Info
             Expanded(
@@ -475,53 +569,57 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                     children: [
                       Text(
                         plan['title'],
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold
+                        style: TextStyle(
+                          color: isSelected ? Colors.white : Colors.white70,
+                          fontSize: 16.sp,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.5,
                         ),
                       ),
                       if (plan['tag'] != null) ...[
-                        const SizedBox(width: 8),
+                        SizedBox(width: 12.w),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 3.h),
                           decoration: BoxDecoration(
-                            color: isBestValue ? Colors.orangeAccent : Colors.blueAccent,
-                            borderRadius: BorderRadius.circular(6),
+                            color: neonCyan,
+                            borderRadius: BorderRadius.circular(4.r),
                           ),
                           child: Text(
                             plan['tag'],
-                            style: const TextStyle(color: Colors.black, fontSize: 10, fontWeight: FontWeight.bold),
+                            style: TextStyle(color: Colors.black, fontSize: 9.sp, fontWeight: FontWeight.w900, letterSpacing: 0.5),
                           ),
                         )
                       ]
                     ],
+                  ),
+                  SizedBox(height: 4.h),
+                  Text(
+                    plan['period'],
+                    style: TextStyle(
+                      color: isSelected ? neonCyan.withOpacity(0.8) : Colors.white38,
+                      fontSize: 11.sp,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ],
               ),
             ),
 
             // Price
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  plan['price'],
-                  style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                Text(
-                  plan['period'],
-                  style: const TextStyle(color: Colors.white54, fontSize: 12),
-                ),
-              ],
-            )
+            Text(
+              plan['price'],
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 18.sp,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ],
         ),
       ),
     );
   }
 }
-
 
 class PrivacyAndSettingScreen extends StatelessWidget {
   const PrivacyAndSettingScreen({super.key});

@@ -8,144 +8,6 @@ import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:untitled/features/UI/screen/PurchaseScreen.dart';
 import '../../../core/service/shared_preferance/Shared_Preferences.dart';
 import 'home_screen.dart';
-//
-//
-//
-//
-// class SplashScreen extends StatefulWidget {
-//   const SplashScreen({super.key});
-//
-//   @override
-//   State<SplashScreen> createState() => _SplashScreenState();
-// }
-//
-// class _SplashScreenState extends State<SplashScreen> {
-//   final InAppPurchase _inAppPurchase = InAppPurchase.instance;
-//   StreamSubscription<List<PurchaseDetails>>? _subscription;
-//   bool _isPremiumUser = false;
-//   late SharedPreferencesService _prefsService;
-//
-//   @override
-//   void initState() {
-//     super.initState();
-//     _listenForPurchaseUpdated();
-//
-//   }
-//   void _listenForPurchaseUpdated() {
-//     _subscription =
-//         _inAppPurchase.purchaseStream.listen((purchaseDetailsList) {
-//           for (var purchaseDetails in purchaseDetailsList) {
-//             _handlePurchase(purchaseDetails);
-//           }
-//         }, onDone: () {
-//           _subscription?.cancel();
-//         }, onError: (error) {
-//           print("❌ Subscription stream error: $error");
-//         });
-//   }
-//
-//   /// This function handles the status of a subscription transaction
-//   Future<void> _handlePurchase(PurchaseDetails purchaseDetails) async {
-//     if (purchaseDetails.status == PurchaseStatus.purchased ||
-//         purchaseDetails.status == PurchaseStatus.restored) {
-//       // This handles both a new subscription and a restored subscription
-//       print("✅ Subscription active for: ${purchaseDetails.productID}");
-//
-//       // 1. Give the user premium access
-//       await _grantPremiumAccess();
-//
-//
-//       // 3. This is CRITICAL for Apple. You must complete the transaction.
-//       if (purchaseDetails.pendingCompletePurchase) {
-//         await _inAppPurchase.completePurchase(purchaseDetails);
-//         print("✅ Subscription transaction completed.");
-//       }
-//     } else if (purchaseDetails.status == PurchaseStatus.error) {
-//       print("❌ Subscription Error: ${purchaseDetails.error?.message}");
-//       if (Navigator.canPop(context)) {
-//         Navigator.of(context).pop();
-//       }
-//     } else if (purchaseDetails.status == PurchaseStatus.pending) {
-//       print("⌛ Subscription purchase pending...");
-//       // You can show a loading indicator here
-//     }
-//   }
-//   Future<void> _grantPremiumAccess() async {
-//     // Legacy AdMob cleanup if still active
-//
-//     setState(() {
-//       _isPremiumUser = true;
-//     });
-//
-//     // 2. Persist the state
-//     await _prefsService.setPermanentPremium(true);
-//     _goToNextPage();
-//   }
-//
-//
-//   Future<void> _goToNextPage() async {
-//     // Show splash for 2 seconds
-//     await Future.delayed(const Duration(seconds: 2));
-//     // Navigate to HomeScreen using standard Flutter navigation
-//     if (mounted) {
-//
-//       if (_isPremiumUser) {
-//         Navigator.pushReplacement(
-//           context,
-//           MaterialPageRoute(builder: (context) => const HomeScreen()),
-//         );
-//       }else{
-//         Navigator.pushReplacement(
-//           context,
-//           MaterialPageRoute(builder: (context) => const PurchaseScreen()),
-//         );
-//       }
-//
-//     }
-//   }
-//
-//   @override
-//   Widget build(BuildContext context) {
-//
-//     return Scaffold(
-//       body: Container(
-//         decoration: BoxDecoration(
-//           gradient: LinearGradient(
-//             colors: [Colors.white, Colors.blue],
-//             begin: Alignment.topLeft,
-//             end: Alignment.bottomRight,
-//           ),
-//         ),
-//         child:  Center(
-//           child: SizedBox(
-//             width: 305.w,
-//             height: 305.h,
-//             child: Applogo(),
-//           ),
-//         ),
-//       ),
-//     );
-//   }
-// }
-//
-//
-//
-// class Applogo extends StatelessWidget {
-//   const Applogo({super.key, this.width, this.height});
-//
-//   final double? width;
-//   final double? height;
-//
-//   @override
-//   Widget build(BuildContext context) {
-//     return Image.asset(
-//       'assets/images/Volumix-png.png',
-//       height: height ?? 120.h,
-//       width: width ?? 120.w,
-//       fit: BoxFit.contain,
-//     );
-//   }
-// }
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -186,18 +48,6 @@ class _SplashScreenState extends State<SplashScreen> {
       }
     } catch (e) {
       debugPrint('❌ Error reading premium status: $e');
-    }
-
-    // Restore old purchases/subscriptions
-    try {
-      final bool available = await _inAppPurchase.isAvailable();
-      if (available) {
-        await _inAppPurchase.restorePurchases();
-      } else {
-        debugPrint('⚠️ Store not available');
-      }
-    } catch (e) {
-      debugPrint('❌ Error restoring purchases: $e');
     }
 
     // Small splash delay
@@ -279,8 +129,7 @@ class _SplashScreenState extends State<SplashScreen> {
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(
-        builder: (context) =>
-        _isPremiumUser ? const HomeScreen() : const PurchaseScreen(),
+        builder: (context) => const HomeScreen(),
       ),
     );
   }
@@ -293,22 +142,86 @@ class _SplashScreenState extends State<SplashScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final primaryColor = theme.colorScheme.primary;
+    final backgroundColor = theme.scaffoldBackgroundColor;
+
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Colors.white, Colors.blue],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
+      backgroundColor: backgroundColor,
+      body: Stack(
+        children: [
+          // Background Gradient
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: RadialGradient(
+                  center: const Alignment(0, 0),
+                  radius: 1.2,
+                  colors: [
+                    primaryColor.withOpacity(0.08),
+                    backgroundColor,
+                  ],
+                ),
+              ),
+            ),
           ),
-        ),
-        child: Center(
-          child: SizedBox(
-            width: 305.w,
-            height: 305.h,
-            child: const Applogo(),
+          Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Hero(
+                  tag: 'app_logo',
+                  child: Container(
+                    width: 180.w,
+                    height: 180.h,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: primaryColor.withOpacity(0.15),
+                          blurRadius: 40,
+                          spreadRadius: 5,
+                        ),
+                      ],
+                    ),
+                    child: const Applogo(),
+                  ),
+                ),
+                SizedBox(height: 48.h),
+                // Premium Brand text
+                Text(
+                  "Volume Booster",
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 24.sp,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 8.0,
+                  ),
+                ),
+                SizedBox(height: 12.h),
+                Text(
+                  "ALGORITHMIC AUDIO BOOST",
+                  style: TextStyle(
+                    color: primaryColor.withOpacity(0.7),
+                    fontSize: 10.sp,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 2.0,
+                  ),
+                ),
+                SizedBox(height: 80.h),
+                // Minimalist loading indicator
+                SizedBox(
+                  width: 40.w,
+                  height: 2.h,
+                  child: LinearProgressIndicator(
+                    backgroundColor: Colors.white.withOpacity(0.05),
+                    color: primaryColor,
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -323,7 +236,7 @@ class Applogo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Image.asset(
-      'assets/images/Volumix-png.png',
+      'assets/images/app_icon.png',
       height: height ?? 120.h,
       width: width ?? 120.w,
       fit: BoxFit.contain,

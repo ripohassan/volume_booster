@@ -147,6 +147,50 @@ class SharedPreferencesService {
     print('🔄 All ad counters reset');
   }
 
+  // ============ Export Counter Methods ============
+
+  static const String _keyDailyExportCount = 'daily_export_count';
+  static const String _keyLastExportDate = 'last_export_date';
+
+  /// Get daily export count (resets each day)
+  Future<int> getDailyExportCount() async {
+    final lastDate = _preferences?.getString(_keyLastExportDate);
+    final today = DateTime.now().toIso8601String().substring(0, 10);
+
+    if (lastDate != today) {
+      // New day - reset counter
+      await _preferences?.setInt(_keyDailyExportCount, 0);
+      await _preferences?.setString(_keyLastExportDate, today);
+      return 0;
+    }
+    return _preferences?.getInt(_keyDailyExportCount) ?? 0;
+  }
+
+  /// Increment daily export count
+  Future<int> incrementDailyExportCount() async {
+    final today = DateTime.now().toIso8601String().substring(0, 10);
+    final lastDate = _preferences?.getString(_keyLastExportDate);
+
+    int currentCount = 0;
+    if (lastDate == today) {
+      currentCount = _preferences?.getInt(_keyDailyExportCount) ?? 0;
+    } else {
+      await _preferences?.setString(_keyLastExportDate, today);
+    }
+
+    final newCount = currentCount + 1;
+    await _preferences?.setInt(_keyDailyExportCount, newCount);
+    print('📊 Daily export count: $newCount');
+    return newCount;
+  }
+
+  /// Check if user can export (free users limited to 3/day)
+  Future<bool> canExport({bool isPremium = false}) async {
+    if (isPremium) return true;
+    final count = await getDailyExportCount();
+    return count < 3;
+  }
+
   // ============ Utility Methods ============
 
   /// Clear all app preferences (for testing/logout)
