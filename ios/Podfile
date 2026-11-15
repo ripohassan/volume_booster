@@ -1,4 +1,5 @@
-platform :ios, '15.0'
+minimum_ios_version = '15.6'
+platform :ios, minimum_ios_version
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
@@ -39,6 +40,13 @@ post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
     target.build_configurations.each do |config|
+      # Pod frameworks and privacy bundles must support the same minimum as
+      # Runner. Keep any higher minimum required by a dependency intact.
+      deployment_target = config.build_settings['IPHONEOS_DEPLOYMENT_TARGET']
+      if deployment_target.nil? || Gem::Version.new(deployment_target) < Gem::Version.new(minimum_ios_version)
+        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = minimum_ios_version
+      end
+
       # Resolve "Command PhaseScriptExecution failed with a nonzero exit code"
       config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
       

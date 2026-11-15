@@ -1,13 +1,11 @@
-import 'dart:async';
+import '../controller/purchase_controller.dart';
+import '../controller/AppLovinAds.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:untitled/features/UI/screen/home_screen.dart';
 
 import '../../../configs/AppConfigs.dart';
 import '../../../core/service/shared_preferance/Shared_Preferences.dart';
-
-
 
 class PurchaseScreen extends StatefulWidget {
   const PurchaseScreen({super.key});
@@ -17,9 +15,9 @@ class PurchaseScreen extends StatefulWidget {
 }
 
 class _PurchaseScreenState extends State<PurchaseScreen> {
-  final InAppPurchase _inAppPurchase = InAppPurchase.instance;
-  StreamSubscription<List<PurchaseDetails>>? _subscription;
-  List<ProductDetails> _products = [];
+  final PurchaseController _purchases = PurchaseController.shared;
+  final AppLovinAds _appLovinAds = AppLovinAds();
+
   bool _isPremiumUser = false;
   bool _isLoading = true;
 
@@ -27,16 +25,18 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
   // 0 = Weekly, 1 = Monthly, 2 = Yearly
   int _selectedIndex = 2;
   bool showSkip = true;
+  bool _purchaseRequested = false;
+  bool _isRewardAdStarting = false;
 
   // In-app purchase product IDs
   static const String _kWeeklyId = 'v.booster.weekly';
   static const String _kMonthlyId = 'v.booster.monthly';
   static const String _kYearlyId = 'v.booster.yearly';
-  
+
   // Premium Colors
   static const Color neonCyan = Color(0xFF00D4FF);
   static const Color bgBlack = Color(0xFF050505);
-  
+
   late SharedPreferencesService _prefsService;
   @override
   void initState() {
@@ -46,7 +46,6 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
     _initializeServices();
   }
 
-
   Future<void> _checkPremiumStatus() async {
     try {
       final isPremium = await _prefsService.isPremiumUser();
@@ -55,7 +54,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
 
       String status = 'Free User';
       if (isPermanent) {
-        status = 'Premium User (Permanent)';
+        status = 'Premium User (Subscription)';
       } else if (hasTemp) {
         final remaining = await _prefsService.getRemainingPremiumTime();
         if (remaining != null) {
@@ -64,6 +63,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
         }
       }
 
+      if (!mounted) return;
       setState(() {
         _isPremiumUser = isPremium;
         _premiumStatus = status;
@@ -73,98 +73,86 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
       print('💎 Premium status: $status');
     } catch (e) {
       print('❌ Error checking premium status: $e');
+      if (!mounted) return;
       setState(() {
         _isLoading = false;
       });
     }
   }
+
   Future<void> _initializeServices() async {
     _prefsService = await SharedPreferencesService.getInstance();
     await _checkPremiumStatus();
   }
 
   Future<void> _initializeInAppPurchase() async {
-    final bool available = await _inAppPurchase.isAvailable();
-    if (!available) return;
-
-    const Set<String> kIds = {_kWeeklyId,_kMonthlyId,_kYearlyId};
-    final ProductDetailsResponse response = await _inAppPurchase.queryProductDetails(kIds);
-
-    if (mounted) {
-      setState(() {
-        _products = response.productDetails;
-      });
+    try {
+      await _purchases.loadProducts();
+    } catch (error) {
+      debugPrint('Store products unavailable: $error');
     }
   }
 
   Future<void> _buyProduct(String productId) async {
     try {
-      final ProductDetails productDetails = _products.firstWhere(
-            (product) => product.id == productId,
-        orElse: () => throw Exception("Product not found in loaded list"),
+      _purchaseRequested = true;
+      await _purchases.buy(productId);
+    } catch (error) {
+      _purchaseRequested = false;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Purchase could not start: $error')),
+        );
+      }
+    }
+  }
+
+  Future<void> _watchRewardedAd() async {
+    if (_isRewardAdStarting || _isPremiumUser) return;
+    setState(() => _isRewardAdStarting = true);
+    _appLovinAds.onRewardedAdDismissed = () {
+      if (mounted) setState(() => _isRewardAdStarting = false);
+    };
+    _appLovinAds.onRewardCallback = (amount) async {
+      await _purchases.setRewardExpiry(
+        DateTime.now().add(const Duration(hours: 1)),
       );
+      if (!mounted) return;
+      setState(() => _isRewardAdStarting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('One hour of temporary access unlocked.'),
+          backgroundColor: Color(0xFF087D5D),
+        ),
+      );
+    };
 
-      final PurchaseParam purchaseParam = PurchaseParam(productDetails: productDetails);
-
-      // Use buyNonConsumable for subscriptions
-      await _inAppPurchase.buyNonConsumable(purchaseParam: purchaseParam);
-    } catch (e) {
-      debugPrint("Error buying product: $e");
-      // Fallback for testing if product not found (e.g. emulator)
-
+    final shown = await _appLovinAds.showRewardedAd();
+    if (!mounted) return;
+    if (!shown) {
+      setState(() => _isRewardAdStarting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Rewarded ad is not ready. Try again shortly.'),
+        ),
+      );
     }
   }
 
   bool _isRestoring = false;
 
   void _listenForPurchaseUpdated() {
-    _subscription = _inAppPurchase.purchaseStream.listen((List<PurchaseDetails> purchaseDetailsList) {
-      for (var purchaseDetails in purchaseDetailsList) {
-        _handlePurchaseDetails(purchaseDetails);
-      }
-    }, onError: (error) {
-      debugPrint("Purchase Error: $error");
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Purchase Error: $error"),
-            backgroundColor: Colors.redAccent,
-          ),
-        );
-      }
-    });
+    _purchases.addListener(_onPurchaseStateChanged);
   }
 
-  Future<void> _handlePurchaseDetails(PurchaseDetails purchaseDetails) async {
-    if (purchaseDetails.status == PurchaseStatus.purchased ||
-        purchaseDetails.status == PurchaseStatus.restored) {
-      _prefsService = await SharedPreferencesService.getInstance();
-      await _prefsService.setPermanentPremium(true);
-
-      if (purchaseDetails.pendingCompletePurchase) {
-        await _inAppPurchase.completePurchase(purchaseDetails);
-      }
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('🎉 Premium unlocked successfully!'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 2),
-          ),
-        );
-        _dismissScreen();
-      }
-    } else if (purchaseDetails.status == PurchaseStatus.error) {
-      debugPrint("Purchase error: ${purchaseDetails.error?.message}");
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(purchaseDetails.error?.message ?? "Purchase failed"),
-            backgroundColor: Colors.redAccent,
-          ),
-        );
-      }
+  void _onPurchaseStateChanged() {
+    if (!mounted) return;
+    setState(() {
+      _isPremiumUser = _purchases.isPremium;
+    });
+    if (_purchaseRequested && _purchases.hasSubscription) {
+      _purchaseRequested = false;
+      _dismissScreen();
     }
   }
 
@@ -181,20 +169,21 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (context) => const Center(
-          child: CircularProgressIndicator(color: neonCyan),
-        ),
+        builder: (context) =>
+            const Center(child: CircularProgressIndicator(color: neonCyan)),
       );
     }
 
     try {
-      final bool available = await _inAppPurchase.isAvailable();
+      final bool available = _purchases.verifier.isConfigured;
       if (!available) {
         if (mounted && Navigator.canPop(context)) Navigator.of(context).pop();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Store is not available right now. Please try again later.'),
+              content: Text(
+                'Store is not available right now. Please try again later.',
+              ),
               backgroundColor: Colors.redAccent,
             ),
           );
@@ -202,7 +191,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
         return;
       }
 
-      await _inAppPurchase.restorePurchases();
+      await _purchases.restore();
       await Future.delayed(const Duration(seconds: 3));
 
       if (mounted && Navigator.canPop(context)) {
@@ -252,7 +241,9 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
 
   @override
   void dispose() {
-    _subscription?.cancel();
+    _purchases.removeListener(_onPurchaseStateChanged);
+    _appLovinAds.onRewardCallback = null;
+    _appLovinAds.onRewardedAdDismissed = null;
     super.dispose();
   }
 
@@ -264,25 +255,25 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
         "price": "\$7.99",
         "period": "3 days free trial, then",
         "id": _kWeeklyId,
-        "tag": null
+        "tag": null,
       },
       {
         "title": "Monthly",
         "price": "\$29.99",
         "period": "3 days free trial, then",
         "id": _kMonthlyId,
-        "tag": null
+        "tag": null,
       },
       {
         "title": "Yearly",
         "price": "\$99.99",
         "period": "3 days free trial, then",
         "id": _kYearlyId,
-        "tag": "BEST VALUE"
+        "tag": "BEST VALUE",
       },
     ];
 
-    // Plans configuration moved inside build to access local variables if needed, 
+    // Plans configuration moved inside build to access local variables if needed,
     // but neonCyan and bgBlack are now class-level constants.
 
     final theme = Theme.of(context);
@@ -299,10 +290,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                 gradient: RadialGradient(
                   center: const Alignment(0, -0.6),
                   radius: 1.2,
-                  colors: [
-                    neonCyan.withOpacity(0.12),
-                    backgroundColor,
-                  ],
+                  colors: [neonCyan.withOpacity(0.12), backgroundColor],
                 ),
               ),
             ),
@@ -314,7 +302,10 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
               children: [
                 // Header (Close Option)
                 Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 10.h),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: 20.w,
+                    vertical: 10.h,
+                  ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
@@ -326,7 +317,11 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                             color: Colors.white.withOpacity(0.12),
                             shape: BoxShape.circle,
                           ),
-                          child: Icon(Icons.close_rounded, color: Colors.white, size: 22.sp),
+                          child: Icon(
+                            Icons.close_rounded,
+                            color: Colors.white,
+                            size: 22.sp,
+                          ),
                         ),
                       ),
                     ],
@@ -339,7 +334,6 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                     padding: EdgeInsets.symmetric(horizontal: 24.w),
                     child: Column(
                       children: [
-                        
                         // Golden Crown Icon
                         Icon(
                           Icons.workspace_premium_rounded,
@@ -360,24 +354,37 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                           ),
                         ),
                         SizedBox(height: 8.h),
-                        
+
                         Text(
                           "Experience the true power of your audio.",
                           textAlign: TextAlign.center,
-                          style: TextStyle(fontSize: 14.sp, color: Colors.white54, letterSpacing: 0.5),
+                          style: TextStyle(
+                            fontSize: 14.sp,
+                            color: Colors.white54,
+                            letterSpacing: 0.5,
+                          ),
                         ),
-                        
+
                         SizedBox(height: 8.h),
 
                         // Consolidated, core minimalist features
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            _buildPremiumFeature(Icons.equalizer_rounded, "Pro Graphic\nEqualizer & FX"),
+                            _buildPremiumFeature(
+                              Icons.equalizer_rounded,
+                              "Pro Graphic\nEqualizer & FX",
+                            ),
                             SizedBox(width: 16.w),
-                            _buildPremiumFeature(Icons.bolt_rounded, "Advanced Gain\n& Bass Boost"),
+                            _buildPremiumFeature(
+                              Icons.bolt_rounded,
+                              "Advanced Gain\n& Bass Boost",
+                            ),
                             SizedBox(width: 16.w),
-                            _buildPremiumFeature(Icons.block_rounded, "100%\nAd-Free"),
+                            _buildPremiumFeature(
+                              Icons.block_rounded,
+                              "100%\nAd-Free",
+                            ),
                           ],
                         ),
 
@@ -388,10 +395,12 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                           shrinkWrap: true,
                           physics: const NeverScrollableScrollPhysics(),
                           itemCount: plans.length,
-                          separatorBuilder: (context, index) => SizedBox(height: 16.h),
-                          itemBuilder: (context, index) => _buildPlanCard(index, plans[index], neonCyan),
+                          separatorBuilder: (context, index) =>
+                              SizedBox(height: 16.h),
+                          itemBuilder: (context, index) =>
+                              _buildPlanCard(index, plans[index], neonCyan),
                         ),
-                        
+
                         SizedBox(height: 260.h), // Spacing for sticky bottom
                       ],
                     ),
@@ -403,7 +412,9 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
 
           // 3. Sticky Bottom CTA
           Positioned(
-            bottom: 0, left: 0, right: 0,
+            bottom: 0,
+            left: 0,
+            right: 0,
             child: Container(
               padding: EdgeInsets.fromLTRB(24.w, 80.h, 24.w, 30.h),
               decoration: BoxDecoration(
@@ -415,7 +426,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                     backgroundColor.withOpacity(0.95),
                     backgroundColor,
                   ],
-                  stops: const [0.0, 0.4, 1.0]
+                  stops: const [0.0, 0.4, 1.0],
                 ),
               ),
               child: Column(
@@ -454,8 +465,20 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                       ),
                     ),
                   ),
+                  SizedBox(height: 12.h),
+                  TextButton.icon(
+                    onPressed: _isRewardAdStarting || _isPremiumUser
+                        ? null
+                        : _watchRewardedAd,
+                    icon: const Icon(Icons.ondemand_video_rounded),
+                    label: Text(
+                      _isRewardAdStarting
+                          ? 'LOADING REWARDED AD…'
+                          : 'WATCH AN AD FOR 1 HOUR ACCESS',
+                    ),
+                  ),
                   SizedBox(height: 20.h),
-                  
+
                   // Restore purchases
                   GestureDetector(
                     onTap: _isRestoring ? null : _restorePurchases,
@@ -470,17 +493,32 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                     ),
                   ),
                   SizedBox(height: 20.h),
-                  
+
                   // Links
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       _buildFooterLink("Terms of Use", () {
-                        Navigator.push(context, MaterialPageRoute(builder: (_) => const TermsCondition()));
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const TermsCondition(),
+                          ),
+                        );
                       }),
-                      Container(margin: EdgeInsets.symmetric(horizontal: 12.w), width: 1, height: 10.h, color: Colors.white24),
+                      Container(
+                        margin: EdgeInsets.symmetric(horizontal: 12.w),
+                        width: 1,
+                        height: 10.h,
+                        color: Colors.white24,
+                      ),
                       _buildFooterLink("Privacy Policy", () {
-                        Navigator.push(context, MaterialPageRoute(builder: (_) => const PrivacyAndSettingScreen()));
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const PrivacyAndSettingScreen(),
+                          ),
+                        );
                       }),
                     ],
                   ),
@@ -517,12 +555,21 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
       onTap: onTap,
       child: Text(
         text,
-        style: TextStyle(color: Colors.white38, fontSize: 10.sp, fontWeight: FontWeight.w400, letterSpacing: 0.5),
+        style: TextStyle(
+          color: Colors.white38,
+          fontSize: 10.sp,
+          fontWeight: FontWeight.w400,
+          letterSpacing: 0.5,
+        ),
       ),
     );
   }
 
-  Widget _buildPlanCard(int index, Map<String, dynamic> plan, Color goldAccent) {
+  Widget _buildPlanCard(
+    int index,
+    Map<String, dynamic> plan,
+    Color goldAccent,
+  ) {
     final isSelected = _selectedIndex == index;
 
     return GestureDetector(
@@ -579,24 +626,34 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                       if (plan['tag'] != null) ...[
                         SizedBox(width: 12.w),
                         Container(
-                          padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 3.h),
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 8.w,
+                            vertical: 3.h,
+                          ),
                           decoration: BoxDecoration(
                             color: neonCyan,
                             borderRadius: BorderRadius.circular(4.r),
                           ),
                           child: Text(
                             plan['tag'],
-                            style: TextStyle(color: Colors.black, fontSize: 9.sp, fontWeight: FontWeight.w900, letterSpacing: 0.5),
+                            style: TextStyle(
+                              color: Colors.black,
+                              fontSize: 9.sp,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 0.5,
+                            ),
                           ),
-                        )
-                      ]
+                        ),
+                      ],
                     ],
                   ),
                   SizedBox(height: 4.h),
                   Text(
                     plan['period'],
                     style: TextStyle(
-                      color: isSelected ? neonCyan.withOpacity(0.8) : Colors.white38,
+                      color: isSelected
+                          ? neonCyan.withOpacity(0.8)
+                          : Colors.white38,
                       fontSize: 11.sp,
                       fontWeight: FontWeight.w500,
                     ),
@@ -626,16 +683,14 @@ class PrivacyAndSettingScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Privacy Policy'),
-      ),
+      appBar: AppBar(title: const Text('Privacy Policy')),
       body: SingleChildScrollView(
         child: Column(
           children: [
             Padding(
               padding: const EdgeInsets.all(8.0),
               child: Text(AppConfigs.privacyPolicy),
-            )
+            ),
           ],
         ),
       ),
@@ -646,24 +701,20 @@ class PrivacyAndSettingScreen extends StatelessWidget {
 class TermsCondition extends StatelessWidget {
   const TermsCondition({super.key});
 
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Terms of Use'),
-      ),
+      appBar: AppBar(title: const Text('Terms of Use')),
       body: SingleChildScrollView(
         child: Column(
           children: [
             Padding(
               padding: const EdgeInsets.all(8.0),
               child: Text(AppConfigs.eulaText),
-            )
+            ),
           ],
         ),
       ),
     );
   }
-
 }

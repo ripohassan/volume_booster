@@ -2,8 +2,6 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 	<dict>
-		<key>CADisableMinimumFrameDurationOnPhone</key>
-		<true/>
 		<key>CFBundleDevelopmentRegion</key>
 		<string>$(DEVELOPMENT_LANGUAGE)</string>
 		<key>CFBundleDisplayName</key>
@@ -70,6 +68,8 @@
 		<string>This identifier will be used to deliver personalized ads to you.</string>
 		<key>NSPhotoLibraryUsageDescription</key>
 		<string>This app requires access to your photo library to select audio or video files for volume boosting.</string>
+		<key>NSAppleMusicUsageDescription</key>
+		<string>This app uses media-library access only when you choose audio to import for processing.</string>
 		<key>NSCameraUsageDescription</key>
 		<string>This app requires camera access to allow recording video directly to boost its audio.</string>
 		<key>NSLocationWhenInUseUsageDescription</key>
@@ -80,5 +80,7 @@
 		<true/>
 		<key>UIViewControllerBasedStatusBarAppearance</key>
 		<false/>
-	</dict>
+	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
+</dict>
 </plist>

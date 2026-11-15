@@ -1,11 +1,9 @@
+import '../controller/purchase_controller.dart';
 //
-import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:in_app_purchase/in_app_purchase.dart';
-import 'package:untitled/features/UI/screen/PurchaseScreen.dart';
 import '../../../core/service/shared_preferance/Shared_Preferences.dart';
 import 'home_screen.dart';
 
@@ -17,8 +15,8 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen> {
-  final InAppPurchase _inAppPurchase = InAppPurchase.instance;
-  StreamSubscription<List<PurchaseDetails>>? _subscription;
+  final PurchaseController _purchases = PurchaseController.shared;
+
 
   late SharedPreferencesService _prefsService;
 
@@ -34,9 +32,12 @@ class _SplashScreenState extends State<SplashScreen> {
   Future<void> _init() async {
     // Initialize SharedPreferences service properly
     _prefsService = await SharedPreferencesService.getInstance();
+    if (!mounted) return;
 
     // Start listening before restorePurchases
     _listenForPurchaseUpdated();
+    await _purchases.initialize();
+    if (!mounted) return;
 
     // Check locally saved premium status
     try {
@@ -50,6 +51,8 @@ class _SplashScreenState extends State<SplashScreen> {
       debugPrint('❌ Error reading premium status: $e');
     }
 
+    if (!mounted) return;
+
     // Small splash delay
     await Future.delayed(const Duration(seconds: 2));
 
@@ -59,67 +62,16 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   void _listenForPurchaseUpdated() {
-    _subscription = _inAppPurchase.purchaseStream.listen(
-          (List<PurchaseDetails> purchaseDetailsList) {
-        if (purchaseDetailsList.isEmpty) {
-          debugPrint('ℹ️ No purchase updates found');
-        }
-
-        for (final purchaseDetails in purchaseDetailsList) {
-          _handlePurchase(purchaseDetails);
-        }
-      },
-      onDone: () {
-        _subscription?.cancel();
-      },
-      onError: (error) {
-        debugPrint("❌ Purchase stream error: $error");
-      },
-    );
+    _purchases.addListener(_onPurchaseStateChanged);
   }
 
-  Future<void> _handlePurchase(PurchaseDetails purchaseDetails) async {
-    switch (purchaseDetails.status) {
-      case PurchaseStatus.purchased:
-      case PurchaseStatus.restored:
-        debugPrint("✅ Subscription active for: ${purchaseDetails.productID}");
-
-        // In production, verify purchase here before unlocking premium
-        await _grantPremiumAccess();
-
-        if (purchaseDetails.pendingCompletePurchase) {
-          await _inAppPurchase.completePurchase(purchaseDetails);
-          debugPrint("✅ Purchase completed");
-        }
-        break;
-
-      case PurchaseStatus.error:
-        debugPrint("❌ Purchase error: ${purchaseDetails.error?.message}");
-        break;
-
-      case PurchaseStatus.pending:
-        debugPrint("⌛ Purchase pending...");
-        break;
-
-      case PurchaseStatus.canceled:
-        debugPrint("⚠️ Purchase canceled by user");
-        break;
-    }
+  void _onPurchaseStateChanged() {
+    if (mounted) setState(() => _isPremiumUser = _purchases.isPremium);
   }
 
-  Future<void> _grantPremiumAccess() async {
-    if (mounted) {
-      setState(() {
-        _isPremiumUser = true;
-      });
-    }
 
-    await _prefsService.setPermanentPremium(true);
 
-    if (!_navigationDone) {
-      _goToNextPage();
-    }
-  }
+
 
   void _goToNextPage() {
     if (!mounted || _navigationDone) return;
@@ -136,7 +88,7 @@ class _SplashScreenState extends State<SplashScreen> {
 
   @override
   void dispose() {
-    _subscription?.cancel();
+    _purchases.removeListener(_onPurchaseStateChanged);
     super.dispose();
   }
 

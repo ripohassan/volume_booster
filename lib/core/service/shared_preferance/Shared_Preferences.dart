@@ -1,4 +1,5 @@
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../features/UI/controller/purchase_controller.dart';
 
 /// Centralized SharedPreferences service for managing app preferences
 class SharedPreferencesService {
@@ -23,15 +24,17 @@ class SharedPreferencesService {
 
   // ============ Premium Status Methods ============
 
-  /// Check if user has permanent premium
+  /// Compatibility name: subscriptions are verified and time-limited.
   Future<bool> isPermanentPremium() async {
-    return _preferences?.getBool(_keyIsPremiumUser) ?? false;
+    await PurchaseController.shared.initialize();
+    return PurchaseController.shared.hasSubscription;
   }
 
-  /// Set permanent premium status
+  /// Retain legacy evidence for migration; this never grants store access.
+  @Deprecated('Use PurchaseController and verified store entitlements')
   Future<void> setPermanentPremium(bool isPremium) async {
     await _preferences?.setBool(_keyIsPremiumUser, isPremium);
-    print('💾 Permanent premium status saved: ${isPremium ? "Premium" : "Free"}');
+    await PurchaseController.shared.refresh();
   }
 
   /// Check if user has temporary premium (not expired)
@@ -39,7 +42,8 @@ class SharedPreferencesService {
     final expiryString = _preferences?.getString(_keyTempPremiumExpiry);
 
     if (expiryString != null) {
-      final expiryTime = DateTime.parse(expiryString);
+      final expiryTime = DateTime.tryParse(expiryString);
+      if (expiryTime == null) { await clearTemporaryPremium(); return false; }
       final now = DateTime.now();
 
       if (now.isBefore(expiryTime)) {
@@ -69,21 +73,21 @@ class SharedPreferencesService {
   Future<void> setTemporaryPremium(Duration duration) async {
     final expiryTime = DateTime.now().add(duration);
     await _preferences?.setString(_keyTempPremiumExpiry, expiryTime.toIso8601String());
+    await PurchaseController.shared.setRewardExpiry(expiryTime);
     print('💎 Temporary premium set until: ${expiryTime.toLocal()}');
   }
 
   /// Clear temporary premium
   Future<void> clearTemporaryPremium() async {
     await _preferences?.remove(_keyTempPremiumExpiry);
+    await PurchaseController.shared.setRewardExpiry(null);
     print('🗑️ Temporary premium cleared');
   }
 
   /// Check if user is premium (permanent OR temporary)
   Future<bool> isPremiumUser() async {
-    final isPermanent = await isPermanentPremium();
-    if (isPermanent) return true;
-
-    return await hasTemporaryPremium();
+    await PurchaseController.shared.initialize();
+    return PurchaseController.shared.isPremium;
   }
 
   /// Get remaining time for temporary premium
@@ -196,6 +200,7 @@ class SharedPreferencesService {
   /// Clear all app preferences (for testing/logout)
   Future<void> clearAll() async {
     await _preferences?.clear();
+    await PurchaseController.shared.setRewardExpiry(null);
     print('🗑️ All preferences cleared');
   }
 
@@ -203,6 +208,7 @@ class SharedPreferencesService {
   Future<void> clearAllPremiumData() async {
     await _preferences?.remove(_keyIsPremiumUser);
     await _preferences?.remove(_keyTempPremiumExpiry);
+    await PurchaseController.shared.setRewardExpiry(null);
     print('🗑️ All premium data cleared');
   }
 

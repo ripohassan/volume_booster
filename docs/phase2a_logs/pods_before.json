@@ -1,0 +1,290 @@
+[
+  {
+    "name": "app_tracking_transparency",
+    "configurations": {
+      "Debug": null,
+      "Profile": null,
+      "Release": null
+    }
+  },
+  {
+    "name": "app_tracking_transparency-app_tracking_transparency_privacy",
+    "configurations": {
+      "Debug": "9.0",
+      "Profile": "9.0",
+      "Release": "9.0"
+    }
+  },
+  {
+    "name": "applovin_max",
+    "configurations": {
+      "Debug": null,
+      "Profile": null,
+      "Release": null
+    }
+  },
+  {
+    "name": "AppLovinSDK",
+    "configurations": {
+      "Debug": "12.0",
+      "Profile": "12.0",
+      "Release": "12.0"
+    }
+  },
+  {
+    "name": "audioplayers_darwin",
+    "configurations": {
+      "Debug": null,
+      "Profile": null,
+      "Release": null
+    }
+  },
+  {
+    "name": "DKImagePickerController",
+    "configurations": {
+      "Debug": "9.0",
+      "Profile": "9.0",
+      "Release": "9.0"
+    }
+  },
+  {
+    "name": "DKImagePickerController-DKImagePickerController",
+    "configurations": {
+      "Debug": "9.0",
+      "Profile": "9.0",
+      "Release": "9.0"
+    }
+  },
+  {
+    "name": "DKPhotoGallery",
+    "configurations": {
+      "Debug": "9.0",
+      "Profile": "9.0",
+      "Release": "9.0"
+    }
+  },
+  {
+    "name": "DKPhotoGallery-DKPhotoGallery",
+    "configurations": {
+      "Debug": "9.0",
+      "Profile": "9.0",
+      "Release": "9.0"
+    }
+  },
+  {
+    "name": "ffmpeg_kit_flutter_new",
+    "configurations": {
+      "Debug": "14.0",
+      "Profile": "14.0",
+      "Release": "14.0"
+    }
+  },
+  {
+    "name": "file_picker",
+    "configurations": {
+      "Debug": null,
+      "Profile": null,
+      "Release": null
+    }
+  },
+  {
+    "name": "file_picker-file_picker_ios_privacy",
+    "configurations": {
+      "Debug": "12.0",
+      "Profile": "12.0",
+      "Release": "12.0"
+    }
+  },
+  {
+    "name": "Flutter",
+    "configurations": {
+      "Debug": "13.0",
+      "Profile": "13.0",
+      "Release": "13.0"
+    }
+  },
+  {
+    "name": "flutter_native_splash",
+    "configurations": {
+      "Debug": null,
+      "Profile": null,
+      "Release": null
+    }
+  },
+  {
+    "name": "flutter_native_splash-flutter_native_splash_privacy",
+    "configurations": {
+      "Debug": "9.0",
+      "Profile": "9.0",
+      "Release": "9.0"
+    }
+  },
+  {
+    "name": "flutter_soloud",
+    "configurations": {
+      "Debug": "13.0",
+      "Profile": "13.0",
+      "Release": "13.0"
+    }
+  },
+  {
+    "name": "in_app_purchase_storekit",
+    "configurations": {
+      "Debug": "13.0",
+      "Profile": "13.0",
+      "Release": "13.0"
+    }
+  },
+  {
+    "name": "in_app_purchase_storekit-in_app_purchase_storekit_privacy",
+    "configurations": {
+      "Debug": "13.0",
+      "Profile": "13.0",
+      "Release": "13.0"
+    }
+  },
+  {
+    "name": "package_info_plus",
+    "configurations": {
+      "Debug": null,
+      "Profile": null,
+      "Release": null
+    }
+  },
+  {
+    "name": "package_info_plus-package_info_plus_privacy",
+    "configurations": {
+      "Debug": "12.0",
+      "Profile": "12.0",
+      "Release": "12.0"
+    }
+  },
+  {
+    "name": "path_provider_foundation",
+    "configurations": {
+      "Debug": "13.0",
+      "Profile": "13.0",
+      "Release": "13.0"
+    }
+  },
+  {
+    "name": "path_provider_foundation-path_provider_foundation_privacy",
+    "configurations": {
+      "Debug": "13.0",
+      "Profile": "13.0",
+      "Release": "13.0"
+    }
+  },
+  {
+    "name": "permission_handler_apple",
+    "configurations": {
+      "Debug": null,
+      "Profile": null,
+      "Release": null
+    }
+  },
+  {
+    "name": "permission_handler_apple-permission_handler_apple_privacy",
+    "configurations": {
+      "Debug": "9.0",
+      "Profile": "9.0",
+      "Release": "9.0"
+    }
+  },
+  {
+    "name": "Pods-Runner",
+    "configurations": {
+      "Debug": "15.0",
+      "Profile": "15.0",
+      "Release": "15.0"
+    }
+  },
+  {
+    "name": "Pods-RunnerTests",
+    "configurations": {
+      "Debug": "15.0",
+      "Profile": "15.0",
+      "Release": "15.0"
+    }
+  },
+  {
+    "name": "SDWebImage",
+    "configurations": {
+      "Debug": "9.0",
+      "Profile": "9.0",
+      "Release": "9.0"
+    }
+  },
+  {
+    "name": "SDWebImage-SDWebImage",
+    "configurations": {
+      "Debug": "9.0",
+      "Profile": "9.0",
+      "Release": "9.0"
+    }
+  },
+  {
+    "name": "share_plus",
+    "configurations": {
+      "Debug": null,
+      "Profile": null,
+      "Release": null
+    }
+  },
+  {
+    "name": "share_plus-share_plus_privacy",
+    "configurations": {
+      "Debug": "12.0",
+      "Profile": "12.0",
+      "Release": "12.0"
+    }
+  },
+  {
+    "name": "shared_preferences_foundation",
+    "configurations": {
+      "Debug": "13.0",
+      "Profile": "13.0",
+      "Release": "13.0"
+    }
+  },
+  {
+    "name": "shared_preferences_foundation-shared_preferences_foundation_privacy",
+    "configurations": {
+      "Debug": "13.0",
+      "Profile": "13.0",
+      "Release": "13.0"
+    }
+  },
+  {
+    "name": "SwiftyGif",
+    "configurations": {
+      "Debug": "9.0",
+      "Profile": "9.0",
+      "Release": "9.0"
+    }
+  },
+  {
+    "name": "SwiftyGif-SwiftyGif",
+    "configurations": {
+      "Debug": "9.0",
+      "Profile": "9.0",
+      "Release": "9.0"
+    }
+  },
+  {
+    "name": "url_launcher_ios",
+    "configurations": {
+      "Debug": "13.0",
+      "Profile": "13.0",
+      "Release": "13.0"
+    }
+  },
+  {
+    "name": "url_launcher_ios-url_launcher_ios_privacy",
+    "configurations": {
+      "Debug": "13.0",
+      "Profile": "13.0",
+      "Release": "13.0"
+    }
+  }
+]

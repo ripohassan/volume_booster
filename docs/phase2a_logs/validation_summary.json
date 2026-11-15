@@ -1,0 +1,38 @@
+{
+  "commands": {
+    "flutter pub get": 0,
+    "flutter analyze": 1,
+    "flutter test": 0,
+    "flutter build ios --release --no-codesign": 0,
+    "flutter build apk --release": 0,
+    "pod install --deployment": 0
+  },
+  "analyzer": {
+    "errors": 0,
+    "warnings": 25,
+    "info": 157,
+    "new_findings": 0
+  },
+  "flutter_tests_passed": 1,
+  "ios": {
+    "CFBundleIdentifier": "m.volume.booster",
+    "MinimumOSVersion": "15.6",
+    "CFBundleShortVersionString": "1.1.5",
+    "CFBundleVersion": "17"
+  },
+  "android_runtime_registrations_verified": [
+    "AppLovinMAX",
+    "AudioplayersPlugin",
+    "FFmpegKitFlutterPlugin",
+    "FilePickerPlugin",
+    "FlutterAndroidLifecyclePlugin",
+    "InAppPurchasePlugin",
+    "PackageInfoPlugin",
+    "PathProviderPlugin",
+    "PermissionHandlerPlugin",
+    "SharePlusPlugin",
+    "SharedPreferencesPlugin",
+    "UrlLauncherPlugin"
+  ],
+  "pubspec_lock_byte_identical": true
+}

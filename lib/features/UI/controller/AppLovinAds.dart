@@ -11,12 +11,19 @@ class AppLovinAds {
 
   bool _isInitialized = false;
   bool _isListenersAttached = false;
+  bool _isShowingRewarded = false;
+  bool _isShowingInterstitial = false;
+
+  bool get _isShowingFullscreenAd =>
+      _isShowingRewarded || _isShowingInterstitial;
 
   void Function(int amount)? onRewardCallback;
+  VoidCallback? onRewardedAdDismissed;
 
   // Track tab switches for interstitial frequency
   int _tabSwitchCount = 0;
-  static const int _tabSwitchThreshold = 3; // Show interstitial every 3 tab switches
+  static const int _tabSwitchThreshold =
+      3; // Show interstitial every 3 tab switches
 
   // Platform-aware Ad Unit IDs
   String get rewardedAdUnitId {
@@ -32,7 +39,11 @@ class AppLovinAds {
 
   String get interstitialAdUnitId {
     if (Platform.isIOS) {
-      return AppConfigs.appLovinInterstitialIdIOSProduction;
+      // Rewarded placements are user-initiated and use a different AppLovin
+      // format from interstitial placements. Do not use a rewarded unit as an
+      // interstitial or show it while a user changes tabs. iOS uses the
+      // existing explicit reward actions instead.
+      return '';
     } else if (Platform.isAndroid) {
       return AppConfigs.appLovinInterstitialIdAndroidProduction;
     }
@@ -88,40 +99,64 @@ class AppLovinAds {
     _isListenersAttached = true;
 
     // Rewarded Listeners
-    AppLovinMAX.setRewardedAdListener(RewardedAdListener(
-      onAdLoadedCallback: (ad) => debugPrint("✅ AppLovin Rewarded Ad Loaded: ${ad.adUnitId}"),
-      onAdLoadFailedCallback: (id, err) => debugPrint("❌ AppLovin Rewarded Load Failed ($id): ${err.message} (code ${err.code})"),
-      onAdDisplayedCallback: (ad) => debugPrint("👁️ AppLovin Rewarded Ad Displayed"),
-      onAdDisplayFailedCallback: (ad, err) {
-        debugPrint("❌ AppLovin Rewarded Display Failed: ${err.message}");
-        loadRewardedAd();
-      },
-      onAdClickedCallback: (ad) => debugPrint("👉 AppLovin Rewarded Ad Clicked"),
-      onAdHiddenCallback: (ad) {
-        debugPrint("ℹ️ AppLovin Rewarded Ad Closed, preloading next ad...");
-        loadRewardedAd();
-      },
-      onAdReceivedRewardCallback: (ad, reward) {
-        debugPrint("🎁 AppLovin Reward Received: ${reward.amount} ${reward.label}");
-        if (onRewardCallback != null) onRewardCallback!(reward.amount);
-      },
-    ));
+    AppLovinMAX.setRewardedAdListener(
+      RewardedAdListener(
+        onAdLoadedCallback: (ad) =>
+            debugPrint("✅ AppLovin Rewarded Ad Loaded: ${ad.adUnitId}"),
+        onAdLoadFailedCallback: (id, err) => debugPrint(
+          "❌ AppLovin Rewarded Load Failed ($id): ${err.message} (code ${err.code})",
+        ),
+        onAdDisplayedCallback: (ad) =>
+            debugPrint("👁️ AppLovin Rewarded Ad Displayed"),
+        onAdDisplayFailedCallback: (ad, err) {
+          debugPrint("❌ AppLovin Rewarded Display Failed: ${err.message}");
+          _isShowingRewarded = false;
+          onRewardedAdDismissed?.call();
+          loadRewardedAd();
+        },
+        onAdClickedCallback: (ad) =>
+            debugPrint("👉 AppLovin Rewarded Ad Clicked"),
+        onAdHiddenCallback: (ad) {
+          debugPrint("ℹ️ AppLovin Rewarded Ad Closed, preloading next ad...");
+          _isShowingRewarded = false;
+          onRewardedAdDismissed?.call();
+          loadRewardedAd();
+        },
+        onAdReceivedRewardCallback: (ad, reward) {
+          debugPrint(
+            "🎁 AppLovin Reward Received: ${reward.amount} ${reward.label}",
+          );
+          if (onRewardCallback != null) onRewardCallback!(reward.amount);
+        },
+      ),
+    );
 
     // Interstitial Listeners
-    AppLovinMAX.setInterstitialListener(InterstitialListener(
-      onAdLoadedCallback: (ad) => debugPrint("✅ AppLovin Interstitial Ad Loaded: ${ad.adUnitId}"),
-      onAdLoadFailedCallback: (id, err) => debugPrint("❌ AppLovin Interstitial Load Failed ($id): ${err.message} (code ${err.code})"),
-      onAdDisplayedCallback: (ad) => debugPrint("👁️ AppLovin Interstitial Ad Displayed"),
-      onAdDisplayFailedCallback: (ad, err) {
-        debugPrint("❌ AppLovin Interstitial Display Failed: ${err.message}");
-        loadInterstitialAd();
-      },
-      onAdClickedCallback: (ad) => debugPrint("👉 AppLovin Interstitial Ad Clicked"),
-      onAdHiddenCallback: (ad) {
-        debugPrint("ℹ️ AppLovin Interstitial Ad Closed, preloading next ad...");
-        loadInterstitialAd();
-      },
-    ));
+    AppLovinMAX.setInterstitialListener(
+      InterstitialListener(
+        onAdLoadedCallback: (ad) =>
+            debugPrint("✅ AppLovin Interstitial Ad Loaded: ${ad.adUnitId}"),
+        onAdLoadFailedCallback: (id, err) => debugPrint(
+          "❌ AppLovin Interstitial Load Failed ($id): ${err.message} (code ${err.code})",
+        ),
+        onAdDisplayedCallback: (ad) =>
+            debugPrint("👁️ AppLovin Interstitial Ad Displayed"),
+        onAdDisplayFailedCallback: (ad, err) {
+          debugPrint("❌ AppLovin Interstitial Display Failed: ${err.message}");
+          _isShowingInterstitial = false;
+          loadInterstitialAd();
+        },
+        onAdClickedCallback: (ad) =>
+            debugPrint("👉 AppLovin Interstitial Ad Clicked"),
+        onAdHiddenCallback: (ad) {
+          debugPrint(
+            "ℹ️ AppLovin Interstitial Ad Closed, preloading next ad...",
+          );
+          _isShowingInterstitial = false;
+          loadInterstitialAd();
+        },
+      ),
+    );
   }
 
   void loadRewardedAd() {
@@ -142,6 +177,7 @@ class AppLovinAds {
   }
 
   Future<bool> showRewardedAd() async {
+    if (_isShowingFullscreenAd) return false;
     final adId = rewardedAdUnitId;
     if (!_isValidAdId(adId)) {
       debugPrint("⚠️ AppLovin: Rewarded ad ID is invalid or placeholder");
@@ -150,6 +186,7 @@ class AppLovinAds {
 
     bool isReady = await AppLovinMAX.isRewardedAdReady(adId) ?? false;
     if (isReady) {
+      _isShowingRewarded = true;
       AppLovinMAX.showRewardedAd(adId);
       return true;
     } else {
@@ -160,6 +197,7 @@ class AppLovinAds {
   }
 
   Future<bool> showInterstitialAd() async {
+    if (_isShowingFullscreenAd) return false;
     final adId = interstitialAdUnitId;
     if (!_isValidAdId(adId)) {
       return false;
@@ -167,6 +205,7 @@ class AppLovinAds {
 
     bool isReady = await AppLovinMAX.isInterstitialReady(adId) ?? false;
     if (isReady) {
+      _isShowingInterstitial = true;
       AppLovinMAX.showInterstitial(adId);
       return true;
     } else {
@@ -204,8 +243,11 @@ class AppLovinAds {
         adUnitId: adId,
         adFormat: AdFormat.banner,
         listener: AdViewAdListener(
-          onAdLoadedCallback: (ad) => debugPrint("✅ AppLovin Banner Loaded: ${ad.adUnitId}"),
-          onAdLoadFailedCallback: (ad, err) => debugPrint("❌ AppLovin Banner Load Failed: ${err.message} (code ${err.code})"),
+          onAdLoadedCallback: (ad) =>
+              debugPrint("✅ AppLovin Banner Loaded: ${ad.adUnitId}"),
+          onAdLoadFailedCallback: (ad, err) => debugPrint(
+            "❌ AppLovin Banner Load Failed: ${err.message} (code ${err.code})",
+          ),
           onAdClickedCallback: (ad) => debugPrint("👉 AppLovin Banner Clicked"),
           onAdExpandedCallback: (ad) {},
           onAdCollapsedCallback: (ad) {},

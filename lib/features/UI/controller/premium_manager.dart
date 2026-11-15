@@ -1,52 +1,26 @@
-import 'package:shared_preferences/shared_preferences.dart';
+import 'purchase_controller.dart';
 
-/// Manager class for handling premium user status
+/// Compatibility facade; legacy booleans cannot establish subscriptions.
 class PremiumManager {
-  static const String _premiumKey = 'is_premium_user';
-
-  /// Check if user has premium subscription
   static Future<bool> isPremiumUser() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      return prefs.getBool(_premiumKey) ?? false;
-    } catch (e) {
-      print('❌ Error checking premium status: $e');
-      return false;
-    }
+    await PurchaseController.shared.initialize();
+    return PurchaseController.shared.isPremium;
   }
 
-  /// Set premium status
+  @Deprecated('Only verified store entitlements can establish paid access')
   static Future<void> setPremiumStatus(bool isPremium) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_premiumKey, isPremium);
-      print('💾 Premium status saved: ${isPremium ? "Premium" : "Free"}');
-    } catch (e) {
-      print('❌ Error saving premium status: $e');
-    }
+    await PurchaseController.shared.initialize();
+    await PurchaseController.shared.refresh();
   }
 
-  /// Clear premium status (for testing/logout)
   static Future<void> clearPremiumStatus() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove(_premiumKey);
-      print('🗑️ Premium status cleared');
-    } catch (e) {
-      print('❌ Error clearing premium status: $e');
-    }
+    await PurchaseController.shared.setRewardExpiry(null);
+    await PurchaseController.shared.refresh();
   }
 
-  /// Activate premium subscription
-  static Future<bool> activatePremium() async {
-    await setPremiumStatus(true);
-    return true;
-  }
-
-  /// Deactivate premium subscription
+  static Future<bool> activatePremium() => isPremiumUser();
   static Future<bool> deactivatePremium() async {
-    await setPremiumStatus(false);
-    return true;
+    await clearPremiumStatus();
+    return !PurchaseController.shared.isPremium;
   }
 }
-

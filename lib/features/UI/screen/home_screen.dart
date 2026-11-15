@@ -1,14 +1,14 @@
-import 'dart:async';
-import 'dart:io';
-import 'package:app_tracking_transparency/app_tracking_transparency.dart';
-import 'package:applovin_max/applovin_max.dart';
+import '../controller/purchase_controller.dart';
 import 'package:flutter/material.dart';
-import 'package:in_app_purchase/in_app_purchase.dart';
+import 'package:in_app_purchase/in_app_purchase.dart' show ProductDetails;
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:untitled/features/UI/screen/boost_screen.dart';
 import 'package:untitled/features/UI/screen/equalizer_screen.dart';
 import 'package:untitled/features/UI/screen/export_screen.dart';
-import 'package:untitled/features/UI/screen/voice_booster_screen.dart';
+import 'package:untitled/features/UI/screen/voice_lab_screen.dart';
+import 'package:untitled/features/UI/screen/audio_studio_screen.dart';
+import 'package:untitled/features/UI/screen/audio_analyzer_screen.dart';
+import 'package:untitled/features/UI/screen/sound_control_screen.dart';
 import '../controller/AppLovinAds.dart';
 import '../../../configs/AppConfigs.dart';
 import 'setting_screen.dart';
@@ -23,13 +23,14 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
+  int _soundNavigationVersion = 0;
   bool _isPremiumUser = false;
   late SharedPreferencesService _prefsService;
   final AppLovinAds _appLovinAds = AppLovinAds();
 
-  final InAppPurchase _inAppPurchase = InAppPurchase.instance;
+  final PurchaseController _purchases = PurchaseController.shared;
   List<ProductDetails> _products = [];
-  StreamSubscription<List<PurchaseDetails>>? _subscription;
+
   String _selectedPlanId = 'v.booster.monthly';
 
   static const Color neonCyan = Color(0xFF00D4FF);
@@ -46,52 +47,44 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // ========== IAP ==========
   Future<void> _initializeInAppPurchase() async {
-    final bool isAvailable = await _inAppPurchase.isAvailable();
-    // Do not automatically restore purchases on init, it causes hang on some platforms
-    final ProductDetailsResponse response = await _inAppPurchase.queryProductDetails(<String>{'v.booster.weekly','v.booster.monthly', 'v.booster.yearly'});
-    if (response.productDetails.isNotEmpty) {
-      setState(() { _products = response.productDetails; });
+    try {
+      final products = await _purchases.loadProducts();
+      if (mounted) setState(() => _products = products);
+    } catch (error) {
+      debugPrint('Store products unavailable: $error');
     }
   }
 
   Future<void> _buyProduct(String productId) async {
     try {
-      final productDetails = _products.firstWhere((prod) => prod.id == productId);
-      final PurchaseParam purchaseParam = PurchaseParam(productDetails: productDetails);
-      await _inAppPurchase.buyNonConsumable(purchaseParam: purchaseParam);
-    } catch (e) { debugPrint("❌ Subscription $productId not found."); }
+      await _purchases.buy(productId);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Purchase could not start: $error')),
+        );
+      }
+    }
   }
 
   void _listenForPurchaseUpdated() {
-    _subscription = _inAppPurchase.purchaseStream.listen((purchaseDetailsList) {
-      for (var pd in purchaseDetailsList) { _handlePurchase(pd); }
-    }, onDone: () { _subscription?.cancel(); }, onError: (error) { debugPrint("❌ Subscription stream error: $error"); });
+    _purchases.addListener(_onPurchaseStateChanged);
   }
 
-  Future<void> _handlePurchase(PurchaseDetails pd) async {
-    if (pd.status == PurchaseStatus.purchased || pd.status == PurchaseStatus.restored) {
-      await _grantPremiumAccess();
-      if (Navigator.canPop(context)) Navigator.of(context).pop();
-      if (pd.pendingCompletePurchase) await _inAppPurchase.completePurchase(pd);
-    } else if (pd.status == PurchaseStatus.error) {
-      debugPrint("❌ Subscription Error: ${pd.error?.message}");
-      if (Navigator.canPop(context)) Navigator.of(context).pop();
-    }
-  }
-
-  Future<void> _grantPremiumAccess() async {
-    setState(() { _isPremiumUser = true; });
-    await _prefsService.setPermanentPremium(true);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Row(children: [Icon(Icons.workspace_premium, color: Colors.white), SizedBox(width: 10), Text('🎉 Premium features unlocked! Ads removed.')]), backgroundColor: Colors.green, duration: Duration(seconds: 3)));
-    }
+  void _onPurchaseStateChanged() {
+    if (!mounted) return;
+    setState(() {
+      _isPremiumUser = _purchases.isPremium;
+    });
   }
 
   bool _isRestoring = false;
 
   Future<void> _restorePurchases() async {
     if (_isRestoring) return;
-    setState(() { _isRestoring = true; });
+    setState(() {
+      _isRestoring = true;
+    });
 
     showDialog(
       context: context,
@@ -102,13 +95,15 @@ class _HomeScreenState extends State<HomeScreen> {
     );
 
     try {
-      final bool available = await _inAppPurchase.isAvailable();
+      final bool available = _purchases.verifier.isConfigured;
       if (!available) {
         if (mounted && Navigator.canPop(context)) Navigator.of(context).pop();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Store is not available right now. Please try again later.'),
+              content: Text(
+                'Store is not available right now. Please try again later.',
+              ),
               backgroundColor: Colors.redAccent,
             ),
           );
@@ -116,7 +111,7 @@ class _HomeScreenState extends State<HomeScreen> {
         return;
       }
 
-      await _inAppPurchase.restorePurchases();
+      await _purchases.restore();
       await Future.delayed(const Duration(seconds: 3));
 
       if (mounted && Navigator.canPop(context)) {
@@ -146,11 +141,12 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     } finally {
       if (mounted) {
-        setState(() { _isRestoring = false; });
+        setState(() {
+          _isRestoring = false;
+        });
       }
     }
   }
-
 
   Future<void> _initAppLovin() async {
     // Already initialized in main.dart, just need to set up listeners and load ads
@@ -159,7 +155,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
-    _subscription?.cancel();
+    _purchases.removeListener(_onPurchaseStateChanged);
     super.dispose();
   }
 
@@ -171,8 +167,13 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _loadPremiumStatus() async {
     try {
       final isPremium = await _prefsService.isPremiumUser();
-      setState(() { _isPremiumUser = isPremium; });
-    } catch (e) { /* noop */ }
+      if (mounted)
+        setState(() {
+          _isPremiumUser = isPremium;
+        });
+    } catch (e) {
+      /* noop */
+    }
   }
 
   void _showSubscriptionDialog() {
@@ -182,28 +183,62 @@ class _HomeScreenState extends State<HomeScreen> {
     ).then((_) => _loadPremiumStatus());
   }
 
-  Widget _buildSubOption(StateSetter setDialogState, String planId, String title, String price, Color neonCyan) {
+  Widget _buildSubOption(
+    StateSetter setDialogState,
+    String planId,
+    String title,
+    String price,
+    Color neonCyan,
+  ) {
     final selected = _selectedPlanId == planId;
     return InkWell(
-      onTap: () { setDialogState(() { _selectedPlanId = planId; }); },
+      onTap: () {
+        setDialogState(() {
+          _selectedPlanId = planId;
+        });
+      },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
         decoration: BoxDecoration(
           color: selected ? neonCyan.withOpacity(0.1) : Colors.transparent,
           borderRadius: BorderRadius.circular(14.r),
-          border: Border.all(color: selected ? neonCyan : Colors.white12, width: 1),
+          border: Border.all(
+            color: selected ? neonCyan : Colors.white12,
+            width: 1,
+          ),
         ),
         child: Row(
           children: [
             Container(
-              width: 18.w, height: 18.w,
-              decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: selected ? neonCyan : Colors.white30, width: selected ? 5 : 1)),
+              width: 18.w,
+              height: 18.w,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: selected ? neonCyan : Colors.white30,
+                  width: selected ? 5 : 1,
+                ),
+              ),
             ),
             SizedBox(width: 12.w),
-            Text(title, style: TextStyle(color: Colors.white, fontSize: 14.sp, fontWeight: selected ? FontWeight.w700 : FontWeight.w500)),
+            Text(
+              title,
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 14.sp,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+              ),
+            ),
             const Spacer(),
-            Text(price, style: TextStyle(color: Colors.white, fontSize: 14.sp, fontWeight: FontWeight.w700)),
+            Text(
+              price,
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 14.sp,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ],
         ),
       ),
@@ -211,38 +246,155 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   String _getProductPrice(String productId, String defaultPrice) {
-    try { return _products.firstWhere((p) => p.id == productId).price; } catch (e) { return defaultPrice; }
+    try {
+      return _products.firstWhere((p) => p.id == productId).price;
+    } catch (e) {
+      return defaultPrice;
+    }
   }
 
   Widget _buildFeatureItem(String text) {
-    return Padding(padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-        const Icon(Icons.check_circle, color: Colors.orange, size: 18),
-        const SizedBox(width: 10),
-        Text(text, style: const TextStyle(color: Colors.white, fontSize: 13)),
-      ]));
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.check_circle, color: Colors.orange, size: 18),
+          const SizedBox(width: 10),
+          Text(text, style: const TextStyle(color: Colors.white, fontSize: 13)),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0D0D1A),
-      body: IndexedStack(
-        index: _currentIndex,
-        children: [
-          BoostScreen(isPremiumUser: _isPremiumUser, onShowSubscription: _showSubscriptionDialog),
-          EqualizerScreen(isPremiumUser: _isPremiumUser, onShowSubscription: _showSubscriptionDialog),
-          VoiceBoosterScreen(isPremiumUser: _isPremiumUser, onShowSubscription: _showSubscriptionDialog),
-          ExportScreen(isPremiumUser: _isPremiumUser, onShowSubscription: _showSubscriptionDialog),
-        ],
-      ),
-      bottomNavigationBar: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _appLovinAds.buildBannerAd(isPremium: _isPremiumUser),
-          _buildBottomNav(),
-        ],
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final pages = [
+          SoundControlScreen(
+            key: ValueKey(_soundNavigationVersion),
+            isPremiumUser: _isPremiumUser,
+            onShowSubscription: _showSubscriptionDialog,
+          ),
+          AudioStudioScreen(
+            isPremiumUser: _isPremiumUser,
+            onShowSubscription: _showSubscriptionDialog,
+          ),
+          VoiceLabScreen(
+            isPremiumUser: _isPremiumUser,
+            onShowSubscription: _showSubscriptionDialog,
+          ),
+          const AudioAnalyzerScreen(),
+        ];
+        final destinations = const [
+          NavigationDestination(
+            icon: Icon(Icons.tune_outlined),
+            selectedIcon: Icon(Icons.tune),
+            label: 'Sound',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.library_music_outlined),
+            selectedIcon: Icon(Icons.library_music),
+            label: 'Studio',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.record_voice_over_outlined),
+            selectedIcon: Icon(Icons.record_voice_over),
+            label: 'Voice Lab',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.analytics_outlined),
+            selectedIcon: Icon(Icons.analytics),
+            label: 'Analyzer',
+          ),
+        ];
+        final select = (int index) {
+          if (_currentIndex != index) {
+            setState(() {
+              _currentIndex = index;
+              if (index == 0) _soundNavigationVersion++;
+            });
+            if (!_isPremiumUser) {
+              _appLovinAds.onTabSwitch();
+            }
+          }
+        };
+        final compact = constraints.maxWidth < 700;
+        final content = IndexedStack(index: _currentIndex, children: pages);
+        return Scaffold(
+          backgroundColor: const Color(0xFF050A16),
+          extendBody: compact,
+          body: compact
+              ? content
+              : Row(
+                  children: [
+                    NavigationRail(
+                      selectedIndex: _currentIndex,
+                      onDestinationSelected: select,
+                      labelType: NavigationRailLabelType.all,
+                      leading: IconButton(
+                        tooltip: 'Settings',
+                        icon: const Icon(Icons.settings),
+                        onPressed: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const SettingScreen(),
+                          ),
+                        ),
+                      ),
+                      destinations: destinations
+                          .map(
+                            (d) => NavigationRailDestination(
+                              icon: d.icon,
+                              selectedIcon: d.selectedIcon,
+                              label: Text(d.label),
+                            ),
+                          )
+                          .toList(),
+                    ),
+                    const VerticalDivider(width: 1),
+                    Expanded(child: content),
+                  ],
+                ),
+          floatingActionButton: compact
+              ? Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF1DD1FF), Color(0xFF177CE8)],
+                    ),
+                  ),
+                  child: FloatingActionButton.small(
+                    backgroundColor: Colors.transparent,
+                    foregroundColor: const Color(0xFF04233F),
+                    elevation: 0,
+                    tooltip: 'Settings',
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const SettingScreen()),
+                    ),
+                    child: const Icon(Icons.settings_rounded),
+                  ),
+                )
+              : null,
+          bottomNavigationBar: compact
+              ? Container(
+                  decoration: const BoxDecoration(
+                    border: Border(top: BorderSide(color: Color(0xFF17608F))),
+                    gradient: LinearGradient(
+                      colors: [Color(0xFF081F36), Color(0xFF041222)],
+                    ),
+                  ),
+                  child: NavigationBar(
+                    selectedIndex: _currentIndex,
+                    onDestinationSelected: select,
+                    destinations: destinations,
+                  ),
+                )
+              : null,
+        );
+      },
     );
   }
 
@@ -250,19 +402,31 @@ class _HomeScreenState extends State<HomeScreen> {
     return Container(
       decoration: BoxDecoration(
         color: const Color(0xFF0D0D1A),
-        border: Border(top: BorderSide(color: Colors.white.withOpacity(0.06), width: 1)),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 20, offset: const Offset(0, -5))],
+        border: Border(
+          top: BorderSide(color: Colors.white.withOpacity(0.06), width: 1),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.3),
+            blurRadius: 20,
+            offset: const Offset(0, -5),
+          ),
+        ],
       ),
       child: SafeArea(
         child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
-          child: Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
-            _buildNavItem(0, Icons.bolt_rounded, 'Boost'),
-            _buildNavItem(1, Icons.graphic_eq_rounded, 'Equalizer'),
-            _buildNavItem(2, Icons.record_voice_over_rounded, 'Voice'),
-            _buildNavItem(3, Icons.upload_rounded, 'Export'),
-            _buildSettingsButton(),
-          ]),
+          padding: EdgeInsets.symmetric(horizontal: 4.w, vertical: 8.h),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildNavItem(0, Icons.library_music_rounded, 'Studio'),
+              _buildNavItem(1, Icons.bolt_rounded, 'Boost'),
+              _buildNavItem(2, Icons.graphic_eq_rounded, 'Equalizer'),
+              _buildNavItem(3, Icons.record_voice_over_rounded, 'Voice'),
+              _buildNavItem(4, Icons.upload_rounded, 'Export'),
+              _buildSettingsButton(),
+            ],
+          ),
         ),
       ),
     );
@@ -283,16 +447,32 @@ class _HomeScreenState extends State<HomeScreen> {
       behavior: HitTestBehavior.opaque,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
+        padding: EdgeInsets.symmetric(horizontal: 7.w, vertical: 8.h),
         decoration: BoxDecoration(
-          color: selected ? const Color(0xFF00D4FF).withOpacity(0.12) : Colors.transparent,
+          color: selected
+              ? const Color(0xFF00D4FF).withOpacity(0.12)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(14.r),
         ),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Icon(icon, color: selected ? const Color(0xFF00D4FF) : Colors.white30, size: 24.sp),
-          SizedBox(height: 4.h),
-          Text(label, style: TextStyle(color: selected ? const Color(0xFF00D4FF) : Colors.white30, fontSize: 10.sp, fontWeight: selected ? FontWeight.w700 : FontWeight.w500)),
-        ]),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              color: selected ? const Color(0xFF00D4FF) : Colors.white30,
+              size: 24.sp,
+            ),
+            SizedBox(height: 4.h),
+            Text(
+              label,
+              style: TextStyle(
+                color: selected ? const Color(0xFF00D4FF) : Colors.white30,
+                fontSize: 10.sp,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -300,17 +480,30 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildSettingsButton() {
     return GestureDetector(
       onTap: () async {
-        await Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingScreen()));
+        await Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const SettingScreen()),
+        );
         await _loadPremiumStatus();
       },
       behavior: HitTestBehavior.opaque,
       child: Padding(
         padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Icon(Icons.settings_rounded, color: Colors.white30, size: 24.sp),
-          SizedBox(height: 4.h),
-          Text('Settings', style: TextStyle(color: Colors.white30, fontSize: 10.sp, fontWeight: FontWeight.w500)),
-        ]),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.settings_rounded, color: Colors.white30, size: 24.sp),
+            SizedBox(height: 4.h),
+            Text(
+              'Settings',
+              style: TextStyle(
+                color: Colors.white30,
+                fontSize: 10.sp,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

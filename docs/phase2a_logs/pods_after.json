@@ -1,0 +1,290 @@
+[
+  {
+    "name": "app_tracking_transparency",
+    "configurations": {
+      "Debug": "15.6",
+      "Profile": "15.6",
+      "Release": "15.6"
+    }
+  },
+  {
+    "name": "app_tracking_transparency-app_tracking_transparency_privacy",
+    "configurations": {
+      "Debug": "15.6",
+      "Profile": "15.6",
+      "Release": "15.6"
+    }
+  },
+  {
+    "name": "applovin_max",
+    "configurations": {
+      "Debug": "15.6",
+      "Profile": "15.6",
+      "Release": "15.6"
+    }
+  },
+  {
+    "name": "AppLovinSDK",
+    "configurations": {
+      "Debug": "15.6",
+      "Profile": "15.6",
+      "Release": "15.6"
+    }
+  },
+  {
+    "name": "audioplayers_darwin",
+    "configurations": {
+      "Debug": "15.6",
+      "Profile": "15.6",
+      "Release": "15.6"
+    }
+  },
+  {
+    "name": "DKImagePickerController",
+    "configurations": {
+      "Debug": "15.6",
+      "Profile": "15.6",
+      "Release": "15.6"
+    }
+  },
+  {
+    "name": "DKImagePickerController-DKImagePickerController",
+    "configurations": {
+      "Debug": "15.6",
+      "Profile": "15.6",
+      "Release": "15.6"
+    }
+  },
+  {
+    "name": "DKPhotoGallery",
+    "configurations": {
+      "Debug": "15.6",
+      "Profile": "15.6",
+      "Release": "15.6"
+    }
+  },
+  {
+    "name": "DKPhotoGallery-DKPhotoGallery",
+    "configurations": {
+      "Debug": "15.6",
+      "Profile": "15.6",
+      "Release": "15.6"
+    }
+  },
+  {
+    "name": "ffmpeg_kit_flutter_new",
+    "configurations": {
+      "Debug": "15.6",
+      "Profile": "15.6",
+      "Release": "15.6"
+    }
+  },
+  {
+    "name": "file_picker",
+    "configurations": {
+      "Debug": "15.6",
+      "Profile": "15.6",
+      "Release": "15.6"
+    }
+  },
+  {
+    "name": "file_picker-file_picker_ios_privacy",
+    "configurations": {
+      "Debug": "15.6",
+      "Profile": "15.6",
+      "Release": "15.6"
+    }
+  },
+  {
+    "name": "Flutter",
+    "configurations": {
+      "Debug": "15.6",
+      "Profile": "15.6",
+      "Release": "15.6"
+    }
+  },
+  {
+    "name": "flutter_native_splash",
+    "configurations": {
+      "Debug": "15.6",
+      "Profile": "15.6",
+      "Release": "15.6"
+    }
+  },
+  {
+    "name": "flutter_native_splash-flutter_native_splash_privacy",
+    "configurations": {
+      "Debug": "15.6",
+      "Profile": "15.6",
+      "Release": "15.6"
+    }
+  },
+  {
+    "name": "flutter_soloud",
+    "configurations": {
+      "Debug": "15.6",
+      "Profile": "15.6",
+      "Release": "15.6"
+    }
+  },
+  {
+    "name": "in_app_purchase_storekit",
+    "configurations": {
+      "Debug": "15.6",
+      "Profile": "15.6",
+      "Release": "15.6"
+    }
+  },
+  {
+    "name": "in_app_purchase_storekit-in_app_purchase_storekit_privacy",
+    "configurations": {
+      "Debug": "15.6",
+      "Profile": "15.6",
+      "Release": "15.6"
+    }
+  },
+  {
+    "name": "package_info_plus",
+    "configurations": {
+      "Debug": "15.6",
+      "Profile": "15.6",
+      "Release": "15.6"
+    }
+  },
+  {
+    "name": "package_info_plus-package_info_plus_privacy",
+    "configurations": {
+      "Debug": "15.6",
+      "Profile": "15.6",
+      "Release": "15.6"
+    }
+  },
+  {
+    "name": "path_provider_foundation",
+    "configurations": {
+      "Debug": "15.6",
+      "Profile": "15.6",
+      "Release": "15.6"
+    }
+  },
+  {
+    "name": "path_provider_foundation-path_provider_foundation_privacy",
+    "configurations": {
+      "Debug": "15.6",
+      "Profile": "15.6",
+      "Release": "15.6"
+    }
+  },
+  {
+    "name": "permission_handler_apple",
+    "configurations": {
+      "Debug": "15.6",
+      "Profile": "15.6",
+      "Release": "15.6"
+    }
+  },
+  {
+    "name": "permission_handler_apple-permission_handler_apple_privacy",
+    "configurations": {
+      "Debug": "15.6",
+      "Profile": "15.6",
+      "Release": "15.6"
+    }
+  },
+  {
+    "name": "Pods-Runner",
+    "configurations": {
+      "Debug": "15.6",
+      "Profile": "15.6",
+      "Release": "15.6"
+    }
+  },
+  {
+    "name": "Pods-RunnerTests",
+    "configurations": {
+      "Debug": "15.6",
+      "Profile": "15.6",
+      "Release": "15.6"
+    }
+  },
+  {
+    "name": "SDWebImage",
+    "configurations": {
+      "Debug": "15.6",
+      "Profile": "15.6",
+      "Release": "15.6"
+    }
+  },
+  {
+    "name": "SDWebImage-SDWebImage",
+    "configurations": {
+      "Debug": "15.6",
+      "Profile": "15.6",
+      "Release": "15.6"
+    }
+  },
+  {
+    "name": "share_plus",
+    "configurations": {
+      "Debug": "15.6",
+      "Profile": "15.6",
+      "Release": "15.6"
+    }
+  },
+  {
+    "name": "share_plus-share_plus_privacy",
+    "configurations": {
+      "Debug": "15.6",
+      "Profile": "15.6",
+      "Release": "15.6"
+    }
+  },
+  {
+    "name": "shared_preferences_foundation",
+    "configurations": {
+      "Debug": "15.6",
+      "Profile": "15.6",
+      "Release": "15.6"
+    }
+  },
+  {
+    "name": "shared_preferences_foundation-shared_preferences_foundation_privacy",
+    "configurations": {
+      "Debug": "15.6",
+      "Profile": "15.6",
+      "Release": "15.6"
+    }
+  },
+  {
+    "name": "SwiftyGif",
+    "configurations": {
+      "Debug": "15.6",
+      "Profile": "15.6",
+      "Release": "15.6"
+    }
+  },
+  {
+    "name": "SwiftyGif-SwiftyGif",
+    "configurations": {
+      "Debug": "15.6",
+      "Profile": "15.6",
+      "Release": "15.6"
+    }
+  },
+  {
+    "name": "url_launcher_ios",
+    "configurations": {
+      "Debug": "15.6",
+      "Profile": "15.6",
+      "Release": "15.6"
+    }
+  },
+  {
+    "name": "url_launcher_ios-url_launcher_ios_privacy",
+    "configurations": {
+      "Debug": "15.6",
+      "Profile": "15.6",
+      "Release": "15.6"
+    }
+  }
+]

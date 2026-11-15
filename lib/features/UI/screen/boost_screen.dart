@@ -122,43 +122,60 @@ class _BoostScreenState extends State<BoostScreen>
   }
 
   Future<void> _onSaveTapped() async {
-    if (!_audioService.hasAudioLoaded || _audioService.currentFilePath == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please load an audio file first.')));
+    if (!_audioService.hasAudioLoaded ||
+        _audioService.currentFilePath == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please load an audio file first.')),
+      );
       return;
     }
-    
+
     if (!widget.isPremiumUser) {
-        widget.onShowSubscription();
-        return;
+      widget.onShowSubscription();
+      return;
     }
-    
+
     setState(() {
       _isSaving = true;
       _saveProgress = 0.0;
     });
-    
-    final gainDb = (_boostPercent - 100) / 10.0;
+
+    // The UI percentage is a linear amplitude ratio; converting the delta as
+    // dB made saved exports disagree with live playback.
+    final gainDb = AudioService.boostPercentToDb(_boostPercent);
     final ffmpeg = FFmpegService();
-    
+
     final outputPath = await ffmpeg.boostAudioFile(
       inputPath: _audioService.currentFilePath!,
-      gainDb: gainDb > 0 ? gainDb : 0.0,
+      gainDb: gainDb,
       format: ExportFormat.aac,
       quality: ExportQuality.standard,
       onProgress: (p) {
         if (mounted) setState(() => _saveProgress = p);
-      }
+      },
     );
-    
+
     if (mounted) {
       setState(() => _isSaving = false);
       if (outputPath != null) {
         final prefs = await SharedPreferencesService.getInstance();
         await prefs.incrementDailyExportCount();
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('✅ Saved successfully! Sharing file...'), backgroundColor: Colors.green));
-        await Share.shareXFiles([XFile(outputPath)], text: 'Boosted with Volume Booster 🔊');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Saved successfully! Sharing file...'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        await Share.shareXFiles([
+          XFile(outputPath),
+        ], text: 'Boosted with Volume Booster 🔊');
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('❌ Failed to save file'), backgroundColor: Colors.red));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('❌ Failed to save file'),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     }
   }
@@ -170,7 +187,7 @@ class _BoostScreenState extends State<BoostScreen>
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [Color(0xFF0D0D1A), Color(0xFF1A1A2E), Color(0xFF0D0D1A)],
+          colors: [Color(0xFF071A2F), Color(0xFF050A16), Color(0xFF020712)],
         ),
       ),
       child: SafeArea(
@@ -316,8 +333,9 @@ class _BoostScreenState extends State<BoostScreen>
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     border: Border.all(
-                      color: const Color(0xFF00D4FF)
-                          .withOpacity(0.3 * (1 - _boostFlashAnimation.value)),
+                      color: const Color(
+                        0xFF00D4FF,
+                      ).withOpacity(0.3 * (1 - _boostFlashAnimation.value)),
                       width: 2,
                     ),
                   ),
@@ -336,7 +354,7 @@ class _BoostScreenState extends State<BoostScreen>
                 BoxShadow(
                   color: (_isBoosting || _audioService.isBoosted)
                       ? const Color(0xFF00D4FF).withOpacity(0.4)
-                      : const Color(0xFF6C63FF).withOpacity(0.2),
+                      : const Color(0xFF0879FA).withOpacity(0.2),
                   blurRadius: 60,
                   spreadRadius: 10,
                 ),
@@ -359,8 +377,8 @@ class _BoostScreenState extends State<BoostScreen>
                   colors: _isBoosting
                       ? [const Color(0xFF00D4FF), const Color(0xFF0066FF)]
                       : _audioService.isBoosted
-                          ? [const Color(0xFF00D4FF), const Color(0xFF6C63FF)]
-                          : [const Color(0xFF2D2D5F), const Color(0xFF1A1A3E)],
+                      ? [const Color(0xFF20D5FF), const Color(0xFF0879FA)]
+                      : [const Color(0xFF09213A), const Color(0xFF041222)],
                 ),
                 border: Border.all(
                   color: _isBoosting
@@ -440,8 +458,7 @@ class _BoostScreenState extends State<BoostScreen>
               double height;
               if (_audioService.isPlaying) {
                 final t = _waveController.value * 2 * pi;
-                final wave =
-                    sin(t + index * 0.5) + sin(t * 1.5 + index) + 2;
+                final wave = sin(t + index * 0.5) + sin(t * 1.5 + index) + 2;
                 height = 8 + (wave * 8.0);
               } else {
                 height = 4.0;
@@ -450,7 +467,7 @@ class _BoostScreenState extends State<BoostScreen>
               final gradient = index / 20.0;
               final color = Color.lerp(
                 const Color(0xFF00D4FF),
-                const Color(0xFF6C63FF),
+                const Color(0xFF0879FA),
                 gradient,
               )!;
 
@@ -530,12 +547,18 @@ class _BoostScreenState extends State<BoostScreen>
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('0%',
-                style: TextStyle(color: Colors.white24, fontSize: 10.sp)),
-            Text('100%',
-                style: TextStyle(color: Colors.white24, fontSize: 10.sp)),
-            Text('200%',
-                style: TextStyle(color: Colors.white24, fontSize: 10.sp)),
+            Text(
+              '0%',
+              style: TextStyle(color: Colors.white24, fontSize: 10.sp),
+            ),
+            Text(
+              '100%',
+              style: TextStyle(color: Colors.white24, fontSize: 10.sp),
+            ),
+            Text(
+              '200%',
+              style: TextStyle(color: Colors.white24, fontSize: 10.sp),
+            ),
           ],
         ),
       ],
@@ -580,8 +603,8 @@ class _BoostScreenState extends State<BoostScreen>
                   color: isSelected
                       ? const Color(0xFF00D4FF).withOpacity(0.5)
                       : isLocked
-                          ? Colors.orange.withOpacity(0.3)
-                          : Colors.white.withOpacity(0.08),
+                      ? Colors.orange.withOpacity(0.3)
+                      : Colors.white.withOpacity(0.08),
                 ),
               ),
               child: Column(
@@ -591,8 +614,8 @@ class _BoostScreenState extends State<BoostScreen>
                     color: isLocked
                         ? Colors.orange
                         : isSelected
-                            ? const Color(0xFF00D4FF)
-                            : Colors.white38,
+                        ? const Color(0xFF00D4FF)
+                        : Colors.white38,
                     size: 18.sp,
                   ),
                   SizedBox(height: 4.h),
@@ -602,11 +625,12 @@ class _BoostScreenState extends State<BoostScreen>
                       color: isLocked
                           ? Colors.orange
                           : isSelected
-                              ? Colors.white
-                              : Colors.white54,
+                          ? Colors.white
+                          : Colors.white54,
                       fontSize: 10.sp,
-                      fontWeight:
-                          isSelected ? FontWeight.w700 : FontWeight.w500,
+                      fontWeight: isSelected
+                          ? FontWeight.w700
+                          : FontWeight.w500,
                     ),
                   ),
                 ],
@@ -686,19 +710,28 @@ class _BoostScreenState extends State<BoostScreen>
           ),
           SizedBox(width: 24.w),
           // Save
-          _isSaving ? SizedBox(
-              width: 44.w, height: 44.w, 
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  CircularProgressIndicator(value: _saveProgress, color: const Color(0xFF00D4FF)),
-                  Text('${(_saveProgress*100).toInt()}%', style: TextStyle(color: Colors.white, fontSize: 10.sp))
-                ],
-              )
-          ) : _buildControlButton(
-            icon: Icons.save_alt_rounded,
-            onTap: _onSaveTapped,
-          ),
+          _isSaving
+              ? SizedBox(
+                  width: 44.w,
+                  height: 44.w,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      CircularProgressIndicator(
+                        value: _saveProgress,
+                        color: const Color(0xFF00D4FF),
+                      ),
+                      Text(
+                        '${(_saveProgress * 100).toInt()}%',
+                        style: TextStyle(color: Colors.white, fontSize: 10.sp),
+                      ),
+                    ],
+                  ),
+                )
+              : _buildControlButton(
+                  icon: Icons.save_alt_rounded,
+                  onTap: _onSaveTapped,
+                ),
         ],
       ),
     );

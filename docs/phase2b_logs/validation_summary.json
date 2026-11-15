@@ -1,0 +1,17 @@
+{
+  "analyzer": {
+    "error": 0,
+    "warning": 20,
+    "info": 144
+  },
+  "new_analyzer_findings": [],
+  "tests_passed": 37,
+  "pubspec_lock_sha256": "f7755cab6d2f86f004c5b4ca13bc5bafa3b1501c07130e5cbc00cde5d12a88a4",
+  "dependency_versions_changed": false,
+  "ios_bundle_id": "m.volume.booster",
+  "ios_minimum": "15.6",
+  "ios_version": "1.1.5",
+  "ios_build": "17",
+  "ios_artifact": "build/ios/iphoneos/Runner.app",
+  "android_artifact": "build/app/outputs/flutter-apk/app-release.apk"
+}
